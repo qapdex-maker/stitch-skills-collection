@@ -8,7 +8,7 @@
  *
  * Usage:
  *   npx tsx post_process.ts .stitch/home.html --base-dir my-app
- *   npx tsx post_process.ts .stitch/page1.html .stitch/page2.html --base-dir .
+ *   npx tsx post_process.ts .stitch/page1.html .stitch/page2.html --base-dir . --json
  *   npx tsx post_process.ts .stitch/*.html --base-dir . --json
  *
  * Flags:
@@ -243,6 +243,13 @@ export function isSafePath(resolvedPath: string, safeRoot: string): boolean {
     absoluteRoot = fs.realpathSync(path.resolve(safeRoot));
   } catch {
     absoluteRoot = path.resolve(safeRoot);
+  }
+
+  // Normalize case on Windows (NTFS is typically case-insensitive) to prevent
+  // case-variation bypasses (e.g. "C:\Safe" vs "c:\safe\file").
+  if (process.platform === 'win32') {
+    absolutePath = absolutePath.toLowerCase();
+    absoluteRoot = absoluteRoot.toLowerCase();
   }
 
   // Ensure absoluteRoot ends with directory separator for startsWith checks
