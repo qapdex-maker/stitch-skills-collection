@@ -1,0 +1,4 @@
+## 2026-03-03 - Path Traversal in Local Resource Inlining
+**Vulnerability:** In post_process.ts, the function resolveLocalFile resolved local paths parsed from HTML/CSS files without validating if they traversed outside of the safe baseDir or project root, permitting arbitrary local file read.
+**Learning:** Functions that parse and inline local file references (like src attributes or CSS url() patterns) are susceptible to Path Traversal (CWE-22) if they resolve paths using path.join or path.resolve without checking absolute containment against a designated safe root.
+**Prevention:** Always resolve the absolute paths of both the target file and the safe root, and verify that the target path is equal to the root path or starts with the root path followed by the directory separator (e.g. absolutePath.startsWith(absoluteRoot + path.sep)).
