@@ -20,6 +20,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // ---------------------------------------------------------------------------
 // MIME type mapping
@@ -226,14 +227,31 @@ function extractCssUrls(text: string): CssUrlRef[] {
  * Validate that a resolved path resides safely inside the designated root directory
  * (SSRF / Path Traversal protection). Prevents escaping baseDir or the workspace.
  */
-function isSafePath(resolvedPath: string, safeRoot: string): boolean {
-  const absolutePath = path.resolve(resolvedPath);
-  const absoluteRoot = path.resolve(safeRoot);
+export function isSafePath(resolvedPath: string, safeRoot: string): boolean {
+  let absolutePath: string;
+  let absoluteRoot: string;
 
-  return absolutePath === absoluteRoot || absolutePath.startsWith(absoluteRoot + path.sep);
+  try {
+    // Attempt to resolve real physical path to handle symlinks (defense-in-depth)
+    absolutePath = fs.realpathSync(path.resolve(resolvedPath));
+  } catch {
+    // If the file doesn't exist or is inaccessible, fall back to resolved path
+    absolutePath = path.resolve(resolvedPath);
+  }
+
+  try {
+    absoluteRoot = fs.realpathSync(path.resolve(safeRoot));
+  } catch {
+    absoluteRoot = path.resolve(safeRoot);
+  }
+
+  // Ensure absoluteRoot ends with directory separator for startsWith checks
+  const safePrefix = absoluteRoot.endsWith(path.sep) ? absoluteRoot : absoluteRoot + path.sep;
+
+  return absolutePath === absoluteRoot || absolutePath.startsWith(safePrefix);
 }
 
-function resolveLocalFile(localPath: string, baseDir: string): string | null {
+export function resolveLocalFile(localPath: string, baseDir: string): string | null {
   const safeRoot = baseDir ? path.resolve(baseDir) : path.resolve('.');
   const candidates = [localPath];
   if (baseDir) {
@@ -245,7 +263,8 @@ function resolveLocalFile(localPath: string, baseDir: string): string | null {
       const resolved = path.resolve(candidate);
       if (isSafePath(resolved, safeRoot)) {
         if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
-          return resolved;
+          // Resolve symlinks to their canonical physical path (defense-in-depth)
+          return fs.realpathSync(resolved);
         }
       }
     } catch {
@@ -511,4 +530,16 @@ function main(): void {
   }
 }
 
-main();
+const isMain = (() => {
+  try {
+    const nodePath = fs.realpathSync(process.argv[1]);
+    const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url));
+    return nodePath === scriptPath;
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
+  main();
+}
