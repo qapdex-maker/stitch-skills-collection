@@ -8,7 +8,7 @@
  *
  * Usage:
  *   npx tsx post_process.ts .stitch/home.html --base-dir my-app
- *   npx tsx post_process.ts .stitch/page1.html .stitch/page2.html --base-dir .
+ *   npx tsx post_process.ts .stitch/page1.html .stitch/page2.html --base-dir . --json
  *   npx tsx post_process.ts .stitch/*.html --base-dir . --json
  *
  * Flags:
@@ -227,10 +227,34 @@ function extractCssUrls(text: string): CssUrlRef[] {
  * (SSRF / Path Traversal protection). Prevents escaping baseDir or the workspace.
  */
 function isSafePath(resolvedPath: string, safeRoot: string): boolean {
-  const absolutePath = path.resolve(resolvedPath);
-  const absoluteRoot = path.resolve(safeRoot);
+  let absolutePath: string;
+  let absoluteRoot: string;
 
-  return absolutePath === absoluteRoot || absolutePath.startsWith(absoluteRoot + path.sep);
+  try {
+    // Attempt to resolve real physical path to handle symlinks (defense-in-depth)
+    absolutePath = fs.realpathSync(path.resolve(resolvedPath));
+  } catch {
+    // If the file doesn't exist or is inaccessible, fall back to resolved path
+    absolutePath = path.resolve(resolvedPath);
+  }
+
+  try {
+    absoluteRoot = fs.realpathSync(path.resolve(safeRoot));
+  } catch {
+    absoluteRoot = path.resolve(safeRoot);
+  }
+
+  // Normalize case on Windows (NTFS is typically case-insensitive) to prevent
+  // case-variation bypasses (e.g. "C:\Safe" vs "c:\safe\file").
+  if (process.platform === 'win32') {
+    absolutePath = absolutePath.toLowerCase();
+    absoluteRoot = absoluteRoot.toLowerCase();
+  }
+
+  // Ensure absoluteRoot ends with directory separator for startsWith checks
+  const safePrefix = absoluteRoot.endsWith(path.sep) ? absoluteRoot : absoluteRoot + path.sep;
+
+  return absolutePath === absoluteRoot || absolutePath.startsWith(safePrefix);
 }
 
 function resolveLocalFile(localPath: string, baseDir: string): string | null {
