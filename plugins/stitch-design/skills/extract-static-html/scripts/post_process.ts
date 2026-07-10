@@ -221,7 +221,20 @@ function extractCssUrls(text: string): CssUrlRef[] {
 // ---------------------------------------------------------------------------
 // Local path resolution
 // ---------------------------------------------------------------------------
+
+/**
+ * Validate that a resolved path resides safely inside the designated root directory
+ * (SSRF / Path Traversal protection). Prevents escaping baseDir or the workspace.
+ */
+function isSafePath(resolvedPath: string, safeRoot: string): boolean {
+  const absolutePath = path.resolve(resolvedPath);
+  const absoluteRoot = path.resolve(safeRoot);
+
+  return absolutePath === absoluteRoot || absolutePath.startsWith(absoluteRoot + path.sep);
+}
+
 function resolveLocalFile(localPath: string, baseDir: string): string | null {
+  const safeRoot = baseDir ? path.resolve(baseDir) : path.resolve('.');
   const candidates = [localPath];
   if (baseDir) {
     candidates.push(path.join(baseDir, localPath.replace(/^\//, '')));
@@ -229,8 +242,11 @@ function resolveLocalFile(localPath: string, baseDir: string): string | null {
 
   for (const candidate of candidates) {
     try {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-        return candidate;
+      const resolved = path.resolve(candidate);
+      if (isSafePath(resolved, safeRoot)) {
+        if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+          return resolved;
+        }
       }
     } catch {
       // Permission errors, etc. — skip
