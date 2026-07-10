@@ -227,7 +227,11 @@ function extractCssUrls(text: string): CssUrlRef[] {
  * Validate that a resolved path resides safely inside the designated root directory
  * (SSRF / Path Traversal protection). Prevents escaping baseDir or the workspace.
  */
+ jules-10539828095716908703-0f05f54d
 export function isSafePath(resolvedPath: string, safeRoot: string): boolean {
+=======
+function isSafePath(resolvedPath: string, safeRoot: string): boolean {
+ main
   let absolutePath: string;
   let absoluteRoot: string;
 
