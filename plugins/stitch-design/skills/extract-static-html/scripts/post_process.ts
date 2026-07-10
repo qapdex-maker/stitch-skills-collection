@@ -20,6 +20,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // ---------------------------------------------------------------------------
 // MIME type mapping
@@ -226,7 +227,11 @@ function extractCssUrls(text: string): CssUrlRef[] {
  * Validate that a resolved path resides safely inside the designated root directory
  * (SSRF / Path Traversal protection). Prevents escaping baseDir or the workspace.
  */
+ jules-10539828095716908703-0f05f54d
+export function isSafePath(resolvedPath: string, safeRoot: string): boolean {
+=======
 function isSafePath(resolvedPath: string, safeRoot: string): boolean {
+ main
   let absolutePath: string;
   let absoluteRoot: string;
 
@@ -257,7 +262,7 @@ function isSafePath(resolvedPath: string, safeRoot: string): boolean {
   return absolutePath === absoluteRoot || absolutePath.startsWith(safePrefix);
 }
 
-function resolveLocalFile(localPath: string, baseDir: string): string | null {
+export function resolveLocalFile(localPath: string, baseDir: string): string | null {
   const safeRoot = baseDir ? path.resolve(baseDir) : path.resolve('.');
   const candidates = [localPath];
   if (baseDir) {
@@ -269,7 +274,8 @@ function resolveLocalFile(localPath: string, baseDir: string): string | null {
       const resolved = path.resolve(candidate);
       if (isSafePath(resolved, safeRoot)) {
         if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
-          return resolved;
+          // Resolve symlinks to their canonical physical path (defense-in-depth)
+          return fs.realpathSync(resolved);
         }
       }
     } catch {
@@ -535,4 +541,16 @@ function main(): void {
   }
 }
 
-main();
+const isMain = (() => {
+  try {
+    const nodePath = fs.realpathSync(process.argv[1]);
+    const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url));
+    return nodePath === scriptPath;
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
+  main();
+}

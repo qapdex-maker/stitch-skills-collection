@@ -21,13 +21,22 @@ import fs from 'node:fs';
 import { isSafePath, resolveLocalFile } from './post_process.js';
 
 // ============================================================================
+ jules-10539828095716908703-0f05f54d
+// Security Regression Test Suite: Path Traversal & Symlink Attacks
+=======
 // Security Regression Test Suite: Path Traversal \u0026 Symlink Attacks
+ main
 // ============================================================================
 //
 // Platform-Specific Path Traversal Considerations:
 // - UNIX platforms use `/` as path separator. Absolute paths start with `/`.
+ jules-10539828095716908703-0f05f54d
+// - Windows platforms use `\` (and support `/`). Absolute paths can start with
+//   drive letters (e.g., `C:\` or `D:/`) or UNC paths (e.g., `\\server\share`).
+=======
 // - Windows platforms use `\\` (and support `/`). Absolute paths can start with
 //   drive letters (e.g., `C:\\` or `D:/`) or UNC paths (e.g., `\\\\server\\share`).
+ main
 // - On both platforms, directory traversal sequences like `..` can be used to
 //   ascend the directory tree.
 // - Our path traversal defense-in-depth resolves target files to their physical,
@@ -35,7 +44,11 @@ import { isSafePath, resolveLocalFile } from './post_process.js';
 //   1. Normal traversal attacks using `..` sequences.
 //   2. Sibling prefix attacks (e.g. root is `/app/foo`, target is `/app/foo-bar`).
 //   3. Symlink/Junction attacks where a link resides inside the safe root but
+ jules-10539828095716908703-0f05f54d
+//      points to a sensitive file outside (e.g. `/app/foo/link` -> `/etc/passwd`).
+=======
 //      points to a sensitive file outside (e.g. `/app/foo/link` -\u003e `/etc/passwd`).
+ main
 // ============================================================================
 
 const TEMP_DIR = path.resolve('./temp_post_process_test_sandbox');
@@ -235,6 +248,8 @@ test.describe('Path Traversal Security Tests', () => {
     assert.ok(resolved, 'Should resolve internal symlink');
     assert.strictEqual(resolved, path.join(SAFE_ROOT, 'image.png'));
   });
+ jules-10539828095716908703-0f05f54d
+=======
 
   // Windows-specific case-insensitivity test
   test('Windows: isSafePath should be case-insensitive (NTFS)', () => {
@@ -262,4 +277,5 @@ test.describe('Path Traversal Security Tests', () => {
     assert.ok(resolved, `resolveLocalFile should resolve case-variant path: ${altRoot}\\image.png`);
   });
 
+ main
 });
