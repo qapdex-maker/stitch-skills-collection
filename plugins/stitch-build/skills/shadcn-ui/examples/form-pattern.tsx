@@ -57,8 +57,9 @@ export function UserProfileForm() {
   })
 
   // Handle form submission
-  function onSubmit(values: FormValues) {
-    // In a real app, send to API
+  async function onSubmit(values: FormValues) {
+    // Simulate API call to provide interactive loading UX
+    await new Promise((resolve) => setTimeout(resolve, 1000))
     console.log(values)
     
     toast({
@@ -148,7 +149,9 @@ export function UserProfileForm() {
           )}
         />
 
-        <Button type="submit">Update profile</Button>
+        <Button type="submit" disabled={form.formState.isSubmitting}>
+          {form.formState.isSubmitting ? "Updating..." : "Update profile"}
+        </Button>
       </form>
     </Form>
   )
