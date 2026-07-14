@@ -76,13 +76,22 @@ export const columns: ColumnDef<User>[] = [
   {
     accessorKey: "name",
     header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+      const ariaLabel =
+        isSorted === "asc"
+          ? "Sorted ascending. Click to sort descending."
+          : isSorted === "desc"
+          ? "Sorted descending. Click to clear sort."
+          : "Not sorted. Click to sort ascending."
+
       return (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          aria-label={`Name, ${ariaLabel}`}
         >
           Name
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+          <ArrowUpDown className="ml-2 h-4 w-4" aria-hidden="true" />
         </Button>
       )
     },
@@ -91,13 +100,22 @@ export const columns: ColumnDef<User>[] = [
   {
     accessorKey: "email",
     header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+      const ariaLabel =
+        isSorted === "asc"
+          ? "Sorted ascending. Click to sort descending."
+          : isSorted === "desc"
+          ? "Sorted descending. Click to clear sort."
+          : "Not sorted. Click to sort ascending."
+
       return (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          aria-label={`Email, ${ariaLabel}`}
         >
           Email
-          <ArrowUpDown className="ml-2 h-4 w-4" />
+          <ArrowUpDown className="ml-2 h-4 w-4" aria-hidden="true" />
         </Button>
       )
     },
@@ -128,7 +146,7 @@ export const columns: ColumnDef<User>[] = [
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-8 w-8 p-0">
               <span className="sr-only">Open menu</span>
-              <MoreHorizontal className="h-4 w-4" />
+              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -178,6 +196,7 @@ export function DataTableExample() {
       <div className="flex items-center py-4">
         <Input
           placeholder="Filter names..."
+          aria-label="Filter names"
           value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
           onChange={(event) =>
             table.getColumn("name")?.setFilterValue(event.target.value)
@@ -187,7 +206,7 @@ export function DataTableExample() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="ml-auto">
-              Columns <ChevronDown className="ml-2 h-4 w-4" />
+              Columns <ChevronDown className="ml-2 h-4 w-4" aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
