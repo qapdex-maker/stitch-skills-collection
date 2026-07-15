@@ -1,3 +1,7 @@
 ## 2026-07-13 - Custom Avatar Accessibility and Form Loading UX
 **Learning:** Screen readers may ignore `aria-label` when it is declared on a generic structural `div` element without a semantic role. For background-image elements used as custom images/avatars, `role="img"` must be explicitly defined to guarantee screen reader announcements. Additionally, forms in our template components should include realistic asynchronous loading feedback and button disabling on submit to reflect industry-standard UX patterns.
 **Action:** Always include `role="img"` on custom `div`-based images, and leverage `formState.isSubmitting` to disable buttons and update label text in form pattern examples.
+
+## 2026-10-24 - Dynamic Accessible Table Header Sorting Descriptors
+**Learning:** Table header buttons that toggle sorting are often announced by screen readers without their active sorting state or indicating the next sort action. Combining the column name with a dynamic, localized string indicating both current sort direction and click action (e.g., "Sorted ascending. Click to sort descending.") greatly improves table usability. Purely visual indicator icons within these buttons must be hidden with `aria-hidden="true"` to prevent duplicate announcements.
+**Action:** Use conditional sorting state helper strings in standard data table column definitions to provide verbose, dynamic `aria-label` tags on sort triggers, and ensure any accompanying icons are explicitly hidden.
