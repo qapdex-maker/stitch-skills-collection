@@ -340,13 +340,38 @@ function inlineImages(
     skippedNotFound: [],
   };
 
+  // Performance caches: avoid repetitive and expensive filesystem/stat queries for duplicate assets.
+  // This prevents redundant disk IO and path resolution calls on larger HTML files with multiple references to the same asset.
+  const resolvedCache = new Map<string, string | null>();
+  const fileCache = new Map<string, ReturnType<typeof readFileAtomic>>();
+
+  const getCachedResolvedFile = (localPath: string): string | null => {
+    const cacheKey = `${localPath}::${baseDir}`;
+    if (resolvedCache.has(cacheKey)) {
+      return resolvedCache.get(cacheKey)!;
+    }
+    const resolved = resolveLocalFile(localPath, baseDir);
+    resolvedCache.set(cacheKey, resolved);
+    return resolved;
+  };
+
+  const getCachedFileContent = (resolvedPath: string): ReturnType<typeof readFileAtomic> => {
+    const cacheKey = `${resolvedPath}::${maxSize}`;
+    if (fileCache.has(cacheKey)) {
+      return fileCache.get(cacheKey)!;
+    }
+    const content = readFileAtomic(resolvedPath, maxSize);
+    fileCache.set(cacheKey, content);
+    return content;
+  };
+
   // --- Inline src="<local_path>" attributes ---
   // Handle src, poster, data attributes
   const srcAttrs = ['src', 'poster', 'data'];
   for (const attr of srcAttrs) {
     const regex = new RegExp(`${attr}="((?!https?:\\/\\/|data:|\\/\\/)[^"]+)"`, 'g');
     html = html.replace(regex, (match: string, localPath: string) => {
-      const resolved = resolveLocalFile(localPath, baseDir);
+      const resolved = getCachedResolvedFile(localPath);
       if (!resolved) {
         if (!localPath.endsWith('.js') && !localPath.endsWith('.css')) {
           stats.skippedNotFound.push(localPath);
@@ -354,7 +379,7 @@ function inlineImages(
         return match;
       }
 
-      const result = readFileAtomic(resolved, maxSize);
+      const result = getCachedFileContent(resolved);
       if (!result) {
         stats.skippedNotFound.push(localPath);
         return match;
@@ -381,13 +406,13 @@ function inlineImages(
   // Process from end to preserve indices
   const sorted = [...localUrlRefs].sort((a, b) => b.start - a.start);
   for (const ref of sorted) {
-    const resolved = resolveLocalFile(ref.url, baseDir);
+    const resolved = getCachedResolvedFile(ref.url);
     if (!resolved) {
       stats.skippedNotFound.push(ref.url);
       continue;
     }
 
-    const result = readFileAtomic(resolved, maxSize);
+    const result = getCachedFileContent(resolved);
     if (!result) {
       stats.skippedNotFound.push(ref.url);
       continue;
@@ -417,13 +442,13 @@ function inlineImages(
       return match;
     }
 
-    const resolved = resolveLocalFile(localPath, baseDir);
+    const resolved = getCachedResolvedFile(localPath);
     if (!resolved) {
       stats.skippedNotFound.push(localPath);
       return match;
     }
 
-    const result = readFileAtomic(resolved, maxSize);
+    const result = getCachedFileContent(resolved);
     if (!result) {
       stats.skippedNotFound.push(localPath);
       return match;
