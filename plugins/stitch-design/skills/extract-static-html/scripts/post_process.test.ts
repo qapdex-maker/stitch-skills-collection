@@ -301,4 +301,16 @@ test.describe('Snapshot URL Validation Security Tests', () => {
       assert.strictEqual(isSafeUrl(url), false, `Expected malformed URL to be rejected: ${url}`);
     }
   });
+
+  test('isSafeUrl should reject cloud metadata / link-local addresses (SSRF protection)', () => {
+    const metadataUrls = [
+      'http://169.254.169.254/latest/meta-data/',
+      'https://169.254.169.254/metadata',
+      'http://[fd00:ec2::254]/latest/meta-data/',
+      'http://[fe80::c9a:d9a:19a:29a]/',
+    ];
+    for (const url of metadataUrls) {
+      assert.strictEqual(isSafeUrl(url), false, `Expected link-local/metadata URL to be blocked: ${url}`);
+    }
+  });
 });

@@ -22,7 +22,8 @@ echo "Downloading from: $DOWNLOAD_URL"
 echo "Saving to: $OUTPUT_PATH"
 
 # Use curl with follow redirects and authentication handling
-curl -L -o "$OUTPUT_PATH" "$DOWNLOAD_URL"
+# Security: restrict protocols to HTTP/HTTPS to prevent protocol-based attacks (e.g. LFI/SSRF)
+curl -L --proto =http,https -o "$OUTPUT_PATH" "$DOWNLOAD_URL"
 
 if [ $? -eq 0 ]; then
   echo "✓ Successfully downloaded to $OUTPUT_PATH"

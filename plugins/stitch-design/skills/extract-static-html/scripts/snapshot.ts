@@ -167,11 +167,35 @@ Options:
  * Validate that the URL is safe and uses a secure protocol.
  * Only HTTP and HTTPS protocols are permitted to prevent LFI (e.g., file://)
  * and other protocol-based attacks.
+ * Additionally, cloud metadata / link-local IP addresses are blocked (SSRF protection)
+ * to prevent headless browsers from exposing sensitive cloud instance credentials,
+ * while still permitting local development access on localhost.
  */
 export function isSafeUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+
+    // Block standard cloud metadata services (SSRF protection)
+    // 169.254.169.254 is the standard IPv4 link-local/metadata address
+    if (hostname === '169.254.169.254') {
+      return false;
+    }
+
+    // Block IPv6 link-local addresses (fe80::/10) and AWS IPv6 metadata address
+    if (
+      hostname.startsWith('fe80:') ||
+      hostname === '[fd00:ec2::254]' ||
+      hostname.startsWith('[fe80:')
+    ) {
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }

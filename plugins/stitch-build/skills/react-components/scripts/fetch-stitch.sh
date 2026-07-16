@@ -20,7 +20,8 @@ if [ -z "$URL" ] || [ -z "$OUTPUT" ]; then
   exit 1
 fi
 echo "Initiating high-reliability fetch for Stitch HTML..."
-curl -L -f -sS --connect-timeout 10 --compressed "$URL" -o "$OUTPUT"
+# Security: restrict protocols to HTTP/HTTPS to prevent protocol-based attacks (e.g. LFI/SSRF)
+curl -L -f -sS --proto =http,https --connect-timeout 10 --compressed "$URL" -o "$OUTPUT"
 if [ $? -eq 0 ]; then
   echo "✅ Successfully retrieved HTML at: $OUTPUT"
   exit 0
