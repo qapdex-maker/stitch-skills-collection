@@ -233,6 +233,8 @@ function createLimiter(concurrency: number): <T>(fn: () => Promise<T>) => Promis
 // Image embedding (with concurrency, redirect-loop protection, timeouts)
 // ---------------------------------------------------------------------------
 const imgCache = new Map<string, string>();
+// Bolt optimization: Cache active fetching promises to avoid simultaneous duplicate HTTP requests
+const activeFetches = new Map<string, Promise<string>>();
 const MAX_REDIRECTS = 5;
 
 function isImageUrl(url: string): boolean {
@@ -286,6 +288,9 @@ function isSafeUrl(parsed: URL): boolean {
 // to block SSRF against private/internal networks.  [CodeQL js/file-access-to-http]
 function fetchAndEncode(url: string, timeout: number, redirectCount = 0): Promise<string> {
   if (imgCache.has(url)) return Promise.resolve(imgCache.get(url)!);
+  // Bolt optimization: Return the active fetch promise if a duplicate request is currently in flight
+  if (activeFetches.has(url)) return activeFetches.get(url)!;
+
   if (!isImageUrl(url)) {
     imgCache.set(url, url);
     return Promise.resolve(url);
@@ -300,7 +305,7 @@ function fetchAndEncode(url: string, timeout: number, redirectCount = 0): Promis
     return Promise.resolve(fallback);
   }
 
-  return new Promise((resolve) => {
+  const p = new Promise<string>((resolve) => {
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(url);
@@ -399,7 +404,12 @@ function fetchAndEncode(url: string, timeout: number, redirectCount = 0): Promis
       imgCache.set(url, fallback);
       resolve(fallback);
     });
+  }).finally(() => {
+    activeFetches.delete(url);
   });
+
+  activeFetches.set(url, p);
+  return p;
 }
 
 // ---------------------------------------------------------------------------
@@ -491,24 +501,10 @@ function replaceCssUrlsInText(
 async function embedImages(html: string, concurrency: number, timeout: number): Promise<string> {
   const limit = createLimiter(concurrency);
 
-  // --- Embed <img src="https://..."> ---
+  // --- Gather all image, CSS url, and video poster references from unmodified HTML ---
   const srcMatches = [...html.matchAll(/src="(https?:\/\/[^"]+)"/g)];
   const srcImageMatches = srcMatches.filter((m) => isImageUrl(m[1]));
 
-  // Prefetch all URLs concurrently
-  await Promise.all(
-    srcImageMatches.map((m) => limit(() => fetchAndEncode(m[1], timeout))),
-  );
-
-  // Replace (cache is now warm — synchronous lookups)
-  for (const m of srcImageMatches) {
-    const encoded = imgCache.get(m[1]);
-    if (encoded && encoded !== m[1]) {
-      html = html.replace(m[0], `src="${encoded}"`);
-    }
-  }
-
-  // --- Embed CSS url("https://...") using robust parser ---
   const cssUrlRefs = extractCssUrls(html);
   const httpUrlRefs = cssUrlRefs.filter(
     (ref) =>
@@ -516,14 +512,41 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
       isImageUrl(ref.url),
   );
 
-  // Prefetch all CSS url() references concurrently
+  const posterMatches = [...html.matchAll(/poster="(https?:\/\/[^"]+)"/g)];
+
+  // Gather all unique URLs to prefetch in one flat set
+  const urlsToPrefetch = new Set<string>();
+  for (const m of srcImageMatches) urlsToPrefetch.add(m[1]);
+  for (const ref of httpUrlRefs) urlsToPrefetch.add(ref.url);
+  for (const m of posterMatches) urlsToPrefetch.add(m[1]);
+
+  // Bolt optimization: Warm up the cache using parallel batch fetching.
+  // This eliminates sequential head-of-line blocking and processes all asset types concurrently.
   await Promise.all(
-    httpUrlRefs.map((ref) => limit(() => fetchAndEncode(ref.url, timeout))),
+    Array.from(urlsToPrefetch).map((url) => limit(() => fetchAndEncode(url, timeout))),
   );
 
-  // Replace from end-to-start to preserve indices
+  // Now perform safe replacements sequentially, re-extracting dynamic references
+  // (like CSS URL refs whose start/end indices shift) to avoid HTML/CSS corruption.
+
+  // 1. Replace src matches (cache is fully warm — synchronous lookups)
+  for (const m of srcImageMatches) {
+    const encoded = imgCache.get(m[1]);
+    if (encoded && encoded !== m[1]) {
+      html = html.replace(m[0], `src="${encoded}"`);
+    }
+  }
+
+  // 2. Re-extract and replace CSS url() references on the mutated HTML
+  const currentCssUrlRefs = extractCssUrls(html);
+  const currentHttpUrlRefs = currentCssUrlRefs.filter(
+    (ref) =>
+      (ref.url.startsWith('http://') || ref.url.startsWith('https://')) &&
+      isImageUrl(ref.url),
+  );
+
   const replacements: Array<{ start: number; end: number; dataUri: string }> = [];
-  for (const ref of httpUrlRefs) {
+  for (const ref of currentHttpUrlRefs) {
     const encoded = imgCache.get(ref.url);
     if (encoded && encoded !== ref.url) {
       replacements.push({ start: ref.start, end: ref.end, dataUri: encoded });
@@ -533,12 +556,10 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
     html = replaceCssUrlsInText(html, replacements);
   }
 
-  // --- Embed <video poster="https://..."> ---
-  const posterMatches = [...html.matchAll(/poster="(https?:\/\/[^"]+)"/g)];
-  await Promise.all(
-    posterMatches.map((m) => limit(() => fetchAndEncode(m[1], timeout))),
-  );
-  for (const m of posterMatches) {
+  // 3. Replace video poster matches on the final mutated HTML
+  // Re-extracting poster matches ensures correct matches even if HTML has shifted
+  const currentPosterMatches = [...html.matchAll(/poster="(https?:\/\/[^"]+)"/g)];
+  for (const m of currentPosterMatches) {
     const encoded = imgCache.get(m[1]);
     if (encoded && encoded !== m[1]) {
       html = html.replace(m[0], `poster="${encoded}"`);
