@@ -19,6 +19,7 @@ import assert from 'node:assert';
 import path from 'node:path';
 import fs from 'node:fs';
 import { isSafePath, resolveLocalFile } from './post_process.js';
+import { isSafeUrl } from './snapshot.js';
 
 // ============================================================================
 // Security Regression Test Suite: Path Traversal & Symlink Attacks
@@ -260,5 +261,44 @@ test.describe('Path Traversal Security Tests', () => {
     // resolveLocalFile should also resolve case-variant references
     const resolved = resolveLocalFile(path.join(altRoot, 'image.png'), absoluteRoot);
     assert.ok(resolved, `resolveLocalFile should resolve case-variant path: ${altRoot}\\image.png`);
+  });
+});
+
+test.describe('Snapshot URL Validation Security Tests', () => {
+  test('isSafeUrl should accept valid http and https URLs', () => {
+    const validUrls = [
+      'http://localhost:3000',
+      'http://127.0.0.1:8080',
+      'https://google.com',
+      'https://stitch.withgoogle.com/path?query=1#hash',
+    ];
+    for (const url of validUrls) {
+      assert.strictEqual(isSafeUrl(url), true, `Expected valid URL to be accepted: ${url}`);
+    }
+  });
+
+  test('isSafeUrl should reject non-http and non-https protocols', () => {
+    const unsafeUrls = [
+      'file:///etc/passwd',
+      'file:///C:/Windows/win.ini',
+      'ftp://example.com/file',
+      'gopher://example.com',
+      'javascript:alert(1)',
+      'data:text/html,<html>',
+    ];
+    for (const url of unsafeUrls) {
+      assert.strictEqual(isSafeUrl(url), false, `Expected unsafe URL protocol to be blocked: ${url}`);
+    }
+  });
+
+  test('isSafeUrl should return false for malformed URLs', () => {
+    const malformed = [
+      'not-a-url',
+      'http:',
+      '://invalid',
+    ];
+    for (const url of malformed) {
+      assert.strictEqual(isSafeUrl(url), false, `Expected malformed URL to be rejected: ${url}`);
+    }
   });
 });

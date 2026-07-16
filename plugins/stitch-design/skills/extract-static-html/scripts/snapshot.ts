@@ -26,9 +26,10 @@
  *   --json          Output machine-readable JSON stats to stdout
  */
 
-import puppeteer, { type Browser } from 'puppeteer';
+import type { Browser } from 'puppeteer';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -162,6 +163,20 @@ Options:
 // ---------------------------------------------------------------------------
 // Input validation
 // ---------------------------------------------------------------------------
+/**
+ * Validate that the URL is safe and uses a secure protocol.
+ * Only HTTP and HTTPS protocols are permitted to prevent LFI (e.g., file://)
+ * and other protocol-based attacks.
+ */
+export function isSafeUrl(urlStr: string): boolean {
+  try {
+    const parsed = new URL(urlStr);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function validateOpts(opts: Opts): void {
   const errors: string[] = [];
 
@@ -169,11 +184,9 @@ function validateOpts(opts: Opts): void {
   if (!opts.output) errors.push('--output is required');
 
   if (opts.url) {
-    try {
-      new URL(opts.url);
-    } catch {
+    if (!isSafeUrl(opts.url)) {
       errors.push(
-        `Invalid URL: "${opts.url}". Must be a valid URL (e.g., http://localhost:5173)`,
+        `Invalid or unsafe URL: "${opts.url}". Must be a valid http or https URL (e.g., http://localhost:5173)`,
       );
     }
   }
@@ -270,6 +283,7 @@ async function snapshot(opts: Opts): Promise<void> {
 
     // ----- Launch browser -----
     console.log('🚀 Launching browser...');
+    const puppeteer = (await import('puppeteer')).default;
     browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -1329,11 +1343,23 @@ async function snapshot(opts: Opts): Promise<void> {
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
-const opts = parseArgs();
-validateOpts(opts);
+const isMain = (() => {
+  try {
+    const nodePath = fs.realpathSync(process.argv[1]);
+    const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url));
+    return nodePath === scriptPath;
+  } catch {
+    return false;
+  }
+})();
 
-snapshot(opts).catch((err: Error) => {
-  console.error('❌ Snapshot failed:', err.message);
-  if (err.stack) console.error(err.stack);
-  process.exit(1);
-});
+if (isMain) {
+  const opts = parseArgs();
+  validateOpts(opts);
+
+  snapshot(opts).catch((err: Error) => {
+    console.error('❌ Snapshot failed:', err.message);
+    if (err.stack) console.error(err.stack);
+    process.exit(1);
+  });
+}
