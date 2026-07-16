@@ -409,26 +409,36 @@ async function snapshot(opts: Opts): Promise<void> {
     });
 
     await page.evaluate((concurrency: number) => {
+      // Promise cache to prevent duplicate fetch and file reader operations for the exact same URLs
+      const uriCache = new Map<string, Promise<string | null>>();
+
       (window as any).__snapshot = {
         CONCURRENCY: concurrency,
 
-        toDataUri: async (url: string): Promise<string | null> => {
-          try {
-            const resp = await fetch(url, {
-              mode: 'cors',
-              credentials: 'same-origin',
-            });
-            if (!resp.ok) return null;
-            const blob = await resp.blob();
-            return new Promise((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.onerror = () => resolve(null);
-              reader.readAsDataURL(blob);
-            });
-          } catch {
-            return null;
+        toDataUri: (url: string): Promise<string | null> => {
+          if (uriCache.has(url)) {
+            return uriCache.get(url)!;
           }
+          const promise = (async () => {
+            try {
+              const resp = await fetch(url, {
+                mode: 'cors',
+                credentials: 'same-origin',
+              });
+              if (!resp.ok) return null;
+              const blob = await resp.blob();
+              return new Promise<string | null>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(blob);
+              });
+            } catch {
+              return null;
+            }
+          })();
+          uriCache.set(url, promise);
+          return promise;
         },
 
         processInBatches: async <T, R>(
