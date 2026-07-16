@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useState } from "react"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, Loader2 } from "lucide-react"
 
 export function AuthLayout() {
   const [isLoading, setIsLoading] = useState<boolean>(false)
@@ -53,7 +53,9 @@ export function AuthLayout() {
             <form onSubmit={onSubmit}>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">
+                    Email <span className="text-destructive" aria-hidden="true">*</span>
+                  </Label>
                   <Input
                     id="email"
                     type="email"
@@ -62,7 +64,9 @@ export function AuthLayout() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">
+                    Password <span className="text-destructive" aria-hidden="true">*</span>
+                  </Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -92,6 +96,9 @@ export function AuthLayout() {
                   className="w-full"
                   disabled={isLoading}
                 >
+                  {isLoading && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  )}
                   {isLoading ? "Signing in..." : "Sign in"}
                 </Button>
                 <Button
@@ -117,7 +124,9 @@ export function AuthLayout() {
             <form onSubmit={onSubmit}>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
+                  <Label htmlFor="name">
+                    Name <span className="text-destructive" aria-hidden="true">*</span>
+                  </Label>
                   <Input
                     id="name"
                     placeholder="John Doe"
@@ -125,7 +134,9 @@ export function AuthLayout() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="register-email">Email</Label>
+                  <Label htmlFor="register-email">
+                    Email <span className="text-destructive" aria-hidden="true">*</span>
+                  </Label>
                   <Input
                     id="register-email"
                     type="email"
@@ -134,7 +145,9 @@ export function AuthLayout() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="register-password">Password</Label>
+                  <Label htmlFor="register-password">
+                    Password <span className="text-destructive" aria-hidden="true">*</span>
+                  </Label>
                   <div className="relative">
                     <Input
                       id="register-password"
@@ -158,7 +171,9 @@ export function AuthLayout() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Label htmlFor="confirm-password">
+                    Confirm Password <span className="text-destructive" aria-hidden="true">*</span>
+                  </Label>
                   <div className="relative">
                     <Input
                       id="confirm-password"
@@ -188,6 +203,9 @@ export function AuthLayout() {
                   className="w-full"
                   disabled={isLoading}
                 >
+                  {isLoading && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  )}
                   {isLoading ? "Creating account..." : "Create account"}
                 </Button>
               </CardFooter>

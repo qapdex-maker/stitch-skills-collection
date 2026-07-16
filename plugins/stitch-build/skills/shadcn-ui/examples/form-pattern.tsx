@@ -26,6 +26,7 @@ import { toast } from "@/components/ui/use-toast"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
+import { Loader2 } from "lucide-react"
 
 // Define form schema with zod
 const formSchema = z.object({
@@ -76,7 +77,9 @@ export function UserProfileForm() {
           name="username"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Username</FormLabel>
+              <FormLabel>
+                Username <span className="text-destructive" aria-hidden="true">*</span>
+              </FormLabel>
               <FormControl>
                 <Input placeholder="johndoe" {...field} />
               </FormControl>
@@ -93,7 +96,9 @@ export function UserProfileForm() {
           name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>
+                Email <span className="text-destructive" aria-hidden="true">*</span>
+              </FormLabel>
               <FormControl>
                 <Input type="email" placeholder="john@example.com" {...field} />
               </FormControl>
@@ -107,7 +112,9 @@ export function UserProfileForm() {
           name="role"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Role</FormLabel>
+              <FormLabel>
+                Role <span className="text-destructive" aria-hidden="true">*</span>
+              </FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
@@ -150,6 +157,9 @@ export function UserProfileForm() {
         />
 
         <Button type="submit" disabled={form.formState.isSubmitting}>
+          {form.formState.isSubmitting && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+          )}
           {form.formState.isSubmitting ? "Updating..." : "Update profile"}
         </Button>
       </form>
