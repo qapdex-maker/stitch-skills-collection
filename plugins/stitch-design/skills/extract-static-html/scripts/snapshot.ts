@@ -171,6 +171,25 @@ Options:
  * to prevent headless browsers from exposing sensitive cloud instance credentials,
  * while still permitting local development access on localhost.
  */
+/**
+ * Convert IPv4-mapped or IPv4-compatible IPv6 addresses (e.g. ::ffff:a9fe:a9fe, ::169.254.169.254)
+ * to their canonical IPv4 decimal representation.
+ */
+function ip6ToIpv4(ip6: string): string | null {
+  const clean = ip6.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!/^(?:0|:)+(?:ffff:)?(?:0:)?/i.test(clean)) return null;
+  const match = clean.match(/^(?:0|:)+(?:ffff:)?(?:0:)?([^:]+:[^:]+|(?:\d{1,3}\.){3}\d{1,3})$/);
+  if (!match) return null;
+  const part = match[1];
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(part)) return part;
+  const hexParts = part.split(':');
+  if (hexParts.length !== 2) return null;
+  const high = parseInt(hexParts[0], 16);
+  const low = parseInt(hexParts[1], 16);
+  if (isNaN(high) || isNaN(low)) return null;
+  return `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
+}
+
 export function isSafeUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
@@ -179,18 +198,20 @@ export function isSafeUrl(urlStr: string): boolean {
     }
 
     const hostname = parsed.hostname.toLowerCase();
+    const mappedIpv4 = ip6ToIpv4(hostname);
+    const ipToCheck = mappedIpv4 || hostname;
 
     // Block standard cloud metadata services (SSRF protection)
     // 169.254.169.254 is the standard IPv4 link-local/metadata address
-    if (hostname === '169.254.169.254') {
+    if (ipToCheck === '169.254.169.254') {
       return false;
     }
 
+    const cleanHost = hostname.replace(/^\[|\]$/g, '');
     // Block IPv6 link-local addresses (fe80::/10) and AWS IPv6 metadata address
     if (
-      hostname.startsWith('fe80:') ||
-      hostname === '[fd00:ec2::254]' ||
-      hostname.startsWith('[fe80:')
+      cleanHost.startsWith('fe80:') ||
+      cleanHost === 'fd00:ec2::254'
     ) {
       return false;
     }

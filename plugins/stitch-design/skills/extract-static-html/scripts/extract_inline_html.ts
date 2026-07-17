@@ -245,26 +245,53 @@ function isImageUrl(url: string): boolean {
 
 
 /**
+ * Convert IPv4-mapped or IPv4-compatible IPv6 addresses (e.g. ::ffff:a9fe:a9fe, ::169.254.169.254)
+ * to their canonical IPv4 decimal representation.
+ */
+function ip6ToIpv4(ip6: string): string | null {
+  const clean = ip6.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!/^(?:0|:)+(?:ffff:)?(?:0:)?/i.test(clean)) return null;
+  const match = clean.match(/^(?:0|:)+(?:ffff:)?(?:0:)?([^:]+:[^:]+|(?:\d{1,3}\.){3}\d{1,3})$/);
+  if (!match) return null;
+  const part = match[1];
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(part)) return part;
+  const hexParts = part.split(':');
+  if (hexParts.length !== 2) return null;
+  const high = parseInt(hexParts[0], 16);
+  const low = parseInt(hexParts[1], 16);
+  if (isNaN(high) || isNaN(low)) return null;
+  return `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
+}
+
+/**
  * Validate that a URL is safe for outbound requests (SSRF protection).
  * Blocks private/internal network addresses and non-HTTP protocols.
  * URLs parsed from HTML files could be attacker-controlled, so we must
  * ensure they only target public internet hosts.
  */
-function isSafeUrl(parsed: URL): boolean {
+export function isSafeUrl(parsed: URL): boolean {
   // Only allow http and https protocols
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return false;
   }
 
   const hostname = parsed.hostname.toLowerCase();
+  const mappedIpv4 = ip6ToIpv4(hostname);
+  const ipToCheck = mappedIpv4 || hostname;
 
-  // Block localhost variants
-  if (hostname === 'localhost' || hostname === '[::1]') {
+  const cleanHost = hostname.replace(/^\[|\]$/g, '');
+  // Block localhost variants and link-local IPv6 addresses
+  if (
+    cleanHost === 'localhost' ||
+    cleanHost === '::1' ||
+    cleanHost.startsWith('fe80:') ||
+    cleanHost === 'fd00:ec2::254'
+  ) {
     return false;
   }
 
   // Block private/reserved IPv4 ranges
-  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4Match) {
     const [, a, b] = ipv4Match.map(Number);
     if (

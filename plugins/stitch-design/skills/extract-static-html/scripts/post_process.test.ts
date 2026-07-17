@@ -19,7 +19,60 @@ import assert from 'node:assert';
 import path from 'node:path';
 import fs from 'node:fs';
 import { isSafePath, resolveLocalFile } from './post_process.js';
-import { isSafeUrl } from './snapshot.js';
+import { isSafeUrl as isSafeUrlSnapshot } from './snapshot.js';
+
+// Local copy of isSafeUrl and ip6ToIpv4 from extract_inline_html.ts to avoid requiring @babel/parser dependency in unit tests
+function ip6ToIpv4(ip6: string): string | null {
+  const clean = ip6.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!/^(?:0|:)+(?:ffff:)?(?:0:)?/i.test(clean)) return null;
+  const match = clean.match(/^(?:0|:)+(?:ffff:)?(?:0:)?([^:]+:[^:]+|(?:\d{1,3}\.){3}\d{1,3})$/);
+  if (!match) return null;
+  const part = match[1];
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(part)) return part;
+  const hexParts = part.split(':');
+  if (hexParts.length !== 2) return null;
+  const high = parseInt(hexParts[0], 16);
+  const low = parseInt(hexParts[1], 16);
+  if (isNaN(high) || isNaN(low)) return null;
+  return `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
+}
+
+function isSafeUrlExtract(parsed: URL): boolean {
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  const mappedIpv4 = ip6ToIpv4(hostname);
+  const ipToCheck = mappedIpv4 || hostname;
+
+  const cleanHost = hostname.replace(/^\[|\]$/g, '');
+  if (
+    cleanHost === 'localhost' ||
+    cleanHost === '::1' ||
+    cleanHost.startsWith('fe80:') ||
+    cleanHost === 'fd00:ec2::254'
+  ) {
+    return false;
+  }
+
+  const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number);
+    if (
+      a === 127 ||          // 127.0.0.0/8  (loopback)
+      a === 10 ||           // 10.0.0.0/8   (private)
+      a === 0 ||            // 0.0.0.0/8    (unspecified)
+      (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12 (private)
+      (a === 192 && b === 168) ||          // 192.168.0.0/16 (private)
+      (a === 169 && b === 254)             // 169.254.0.0/16 (link-local)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 // ============================================================================
 // Security Regression Test Suite: Path Traversal & Symlink Attacks
@@ -265,7 +318,7 @@ test.describe('Path Traversal Security Tests', () => {
 });
 
 test.describe('Snapshot URL Validation Security Tests', () => {
-  test('isSafeUrl should accept valid http and https URLs', () => {
+  test('isSafeUrl (snapshot) should accept valid http and https URLs', () => {
     const validUrls = [
       'http://localhost:3000',
       'http://127.0.0.1:8080',
@@ -273,11 +326,11 @@ test.describe('Snapshot URL Validation Security Tests', () => {
       'https://stitch.withgoogle.com/path?query=1#hash',
     ];
     for (const url of validUrls) {
-      assert.strictEqual(isSafeUrl(url), true, `Expected valid URL to be accepted: ${url}`);
+      assert.strictEqual(isSafeUrlSnapshot(url), true, `Expected valid URL to be accepted by snapshot: ${url}`);
     }
   });
 
-  test('isSafeUrl should reject non-http and non-https protocols', () => {
+  test('isSafeUrl (snapshot) should reject non-http and non-https protocols', () => {
     const unsafeUrls = [
       'file:///etc/passwd',
       'file:///C:/Windows/win.ini',
@@ -287,30 +340,95 @@ test.describe('Snapshot URL Validation Security Tests', () => {
       'data:text/html,<html>',
     ];
     for (const url of unsafeUrls) {
-      assert.strictEqual(isSafeUrl(url), false, `Expected unsafe URL protocol to be blocked: ${url}`);
+      assert.strictEqual(isSafeUrlSnapshot(url), false, `Expected unsafe URL protocol to be blocked by snapshot: ${url}`);
     }
   });
 
-  test('isSafeUrl should return false for malformed URLs', () => {
+  test('isSafeUrl (snapshot) should return false for malformed URLs', () => {
     const malformed = [
       'not-a-url',
       'http:',
       '://invalid',
     ];
     for (const url of malformed) {
-      assert.strictEqual(isSafeUrl(url), false, `Expected malformed URL to be rejected: ${url}`);
+      assert.strictEqual(isSafeUrlSnapshot(url), false, `Expected malformed URL to be rejected by snapshot: ${url}`);
     }
   });
 
-  test('isSafeUrl should reject cloud metadata / link-local addresses (SSRF protection)', () => {
+  test('isSafeUrl (snapshot) should reject cloud metadata / link-local addresses (SSRF protection)', () => {
     const metadataUrls = [
       'http://169.254.169.254/latest/meta-data/',
       'https://169.254.169.254/metadata',
       'http://[fd00:ec2::254]/latest/meta-data/',
       'http://[fe80::c9a:d9a:19a:29a]/',
+      'http://[::ffff:169.254.169.254]/',
+      'http://[::ffff:a9fe:a9fe]/',
+      'http://0xa9fea9fe/',
+      'http://0251.0376.0251.0376/',
+      'http://2852039166/',
+      'http://[::ffff:a9fe:a9fe]:8080/path',
     ];
     for (const url of metadataUrls) {
-      assert.strictEqual(isSafeUrl(url), false, `Expected link-local/metadata URL to be blocked: ${url}`);
+      assert.strictEqual(isSafeUrlSnapshot(url), false, `Expected link-local/metadata URL to be blocked by snapshot: ${url}`);
+    }
+  });
+});
+
+test.describe('Extract Inline HTML URL Validation Security Tests', () => {
+  const checkUrl = (urlStr: string): boolean => {
+    try {
+      return isSafeUrlExtract(new URL(urlStr));
+    } catch {
+      return false;
+    }
+  };
+
+  test('isSafeUrl (extract) should accept public http and https URLs', () => {
+    const validUrls = [
+      'https://google.com',
+      'https://stitch.withgoogle.com/path?query=1#hash',
+    ];
+    for (const url of validUrls) {
+      assert.strictEqual(checkUrl(url), true, `Expected public URL to be accepted: ${url}`);
+    }
+  });
+
+  test('isSafeUrl (extract) should reject non-http and non-https protocols', () => {
+    const unsafeUrls = [
+      'file:///etc/passwd',
+      'ftp://example.com/file',
+      'javascript:alert(1)',
+      'data:text/html,<html>',
+    ];
+    for (const url of unsafeUrls) {
+      assert.strictEqual(checkUrl(url), false, `Expected unsafe protocol to be blocked: ${url}`);
+    }
+  });
+
+  test('isSafeUrl (extract) should reject loopback/private/link-local/metadata addresses (SSRF protection)', () => {
+    const blockedUrls = [
+      'http://localhost:3000',
+      'http://127.0.0.1:8080',
+      'http://[::1]/',
+      'http://[::ffff:127.0.0.1]/',
+      'http://[::ffff:7f00:1]/',
+      'http://10.0.0.1/',
+      'http://[::ffff:10.0.0.1]/',
+      'http://[::ffff:a00:1]/',
+      'http://192.168.1.1/',
+      'http://[::ffff:192.168.1.1]/',
+      'http://[::ffff:c0a8:101]/',
+      'http://169.254.169.254/',
+      'http://[::ffff:169.254.169.254]/',
+      'http://[::ffff:a9fe:a9fe]/',
+      'http://[fe80::c9a:d9a:19a:29a]/',
+      'http://[fd00:ec2::254]/',
+      'http://0xa9fea9fe/',
+      'http://0251.0376.0251.0376/',
+      'http://2852039166/',
+    ];
+    for (const url of blockedUrls) {
+      assert.strictEqual(checkUrl(url), false, `Expected loopback/private/link-local/metadata URL to be blocked: ${url}`);
     }
   });
 });
