@@ -223,39 +223,50 @@ function extractCssUrls(text: string): CssUrlRef[] {
 // Local path resolution
 // ---------------------------------------------------------------------------
 
+// Cache resolved real paths to avoid redundant and expensive synchronous physical disk IO queries and path lookups
+const realpathCache = new Map<string, string>();
+
+function getRealPath(p: string): string {
+  const resolved = path.resolve(p);
+  if (realpathCache.has(resolved)) {
+    return realpathCache.get(resolved)!;
+  }
+  let real: string;
+  try {
+    if (fs.existsSync(resolved)) {
+      real = fs.realpathSync(resolved);
+    } else {
+      real = resolved;
+    }
+  } catch {
+    real = resolved;
+  }
+  realpathCache.set(resolved, real);
+  return real;
+}
+
 /**
  * Validate that a resolved path resides safely inside the designated root directory
  * (SSRF / Path Traversal protection). Prevents escaping baseDir or the workspace.
  */
 export function isSafePath(resolvedPath: string, safeRoot: string): boolean {
-  let absolutePath: string;
-  let absoluteRoot: string;
+  const absolutePath = getRealPath(resolvedPath);
+  const absoluteRoot = getRealPath(safeRoot);
 
-  try {
-    // Attempt to resolve real physical path to handle symlinks (defense-in-depth)
-    absolutePath = fs.realpathSync(path.resolve(resolvedPath));
-  } catch {
-    // If the file doesn't exist or is inaccessible, fall back to resolved path
-    absolutePath = path.resolve(resolvedPath);
-  }
-
-  try {
-    absoluteRoot = fs.realpathSync(path.resolve(safeRoot));
-  } catch {
-    absoluteRoot = path.resolve(safeRoot);
-  }
+  let normPath = absolutePath;
+  let normRoot = absoluteRoot;
 
   // Normalize case on Windows (NTFS is typically case-insensitive) to prevent
   // case-variation bypasses (e.g. "C:\Safe" vs "c:\safe\file").
   if (process.platform === 'win32') {
-    absolutePath = absolutePath.toLowerCase();
-    absoluteRoot = absoluteRoot.toLowerCase();
+    normPath = normPath.toLowerCase();
+    normRoot = normRoot.toLowerCase();
   }
 
   // Ensure absoluteRoot ends with directory separator for startsWith checks
-  const safePrefix = absoluteRoot.endsWith(path.sep) ? absoluteRoot : absoluteRoot + path.sep;
+  const safePrefix = normRoot.endsWith(path.sep) ? normRoot : normRoot + path.sep;
 
-  return absolutePath === absoluteRoot || absolutePath.startsWith(safePrefix);
+  return normPath === normRoot || normPath.startsWith(safePrefix);
 }
 
 export function resolveLocalFile(localPath: string, baseDir: string): string | null {
