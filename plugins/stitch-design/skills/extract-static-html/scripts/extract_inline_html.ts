@@ -280,17 +280,20 @@ export function isSafeUrl(parsed: URL): boolean {
   const ipToCheck = mappedIpv4 || hostname;
 
   const cleanHost = hostname.replace(/^\[|\]$/g, '');
-  // Block localhost variants and link-local IPv6 addresses
+  // Block localhost, loopback, link-local, unique local, multicast, and unspecified/all-zero IPv6 addresses
   if (
     cleanHost === 'localhost' ||
     cleanHost === '::1' ||
-    cleanHost.startsWith('fe80:') ||
-    cleanHost === 'fd00:ec2::254'
+    cleanHost === '::' ||
+    /^[0:]+$/.test(cleanHost) ||        // all-zero IPv6
+    /^fe[89ab][0-9a-f]:/i.test(cleanHost) || // fe80::/10 (link-local)
+    /^f[cd][0-9a-f]{2}:/i.test(cleanHost) || // fc00::/7 (unique local address)
+    /^ff[0-9a-f]{2}:/i.test(cleanHost)  // ff00::/8 (multicast)
   ) {
     return false;
   }
 
-  // Block private/reserved IPv4 ranges
+  // Block private/reserved/untrusted IPv4 ranges
   const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4Match) {
     const [, a, b] = ipv4Match.map(Number);
@@ -300,7 +303,10 @@ export function isSafeUrl(parsed: URL): boolean {
       a === 0 ||            // 0.0.0.0/8    (unspecified)
       (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12 (private)
       (a === 192 && b === 168) ||          // 192.168.0.0/16 (private)
-      (a === 169 && b === 254)             // 169.254.0.0/16 (link-local)
+      (a === 169 && b === 254) ||          // 169.254.0.0/16 (link-local)
+      (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 (Carrier-Grade NAT)
+      (a === 198 && b >= 18 && b <= 19) || // 198.18.0.0/15 (Benchmark testing)
+      a >= 224             // 224.0.0.0/4 (Multicast/Reserved/Class E)
     ) {
       return false;
     }

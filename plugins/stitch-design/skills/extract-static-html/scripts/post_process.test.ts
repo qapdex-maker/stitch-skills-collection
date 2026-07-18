@@ -50,8 +50,11 @@ function isSafeUrlExtract(parsed: URL): boolean {
   if (
     cleanHost === 'localhost' ||
     cleanHost === '::1' ||
-    cleanHost.startsWith('fe80:') ||
-    cleanHost === 'fd00:ec2::254'
+    cleanHost === '::' ||
+    /^[0:]+$/.test(cleanHost) ||        // all-zero IPv6
+    /^fe[89ab][0-9a-f]:/i.test(cleanHost) || // fe80::/10 (link-local)
+    /^f[cd][0-9a-f]{2}:/i.test(cleanHost) || // fc00::/7 (unique local address)
+    /^ff[0-9a-f]{2}:/i.test(cleanHost)  // ff00::/8 (multicast)
   ) {
     return false;
   }
@@ -65,7 +68,10 @@ function isSafeUrlExtract(parsed: URL): boolean {
       a === 0 ||            // 0.0.0.0/8    (unspecified)
       (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12 (private)
       (a === 192 && b === 168) ||          // 192.168.0.0/16 (private)
-      (a === 169 && b === 254)             // 169.254.0.0/16 (link-local)
+      (a === 169 && b === 254) ||          // 169.254.0.0/16 (link-local)
+      (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 (Carrier-Grade NAT)
+      (a === 198 && b >= 18 && b <= 19) || // 198.18.0.0/15 (Benchmark testing)
+      a >= 224             // 224.0.0.0/4 (Multicast/Reserved/Class E)
     ) {
       return false;
     }
@@ -410,6 +416,7 @@ test.describe('Extract Inline HTML URL Validation Security Tests', () => {
       'http://localhost:3000',
       'http://127.0.0.1:8080',
       'http://[::1]/',
+      'http://[::]/',
       'http://[::ffff:127.0.0.1]/',
       'http://[::ffff:7f00:1]/',
       'http://10.0.0.1/',
@@ -422,13 +429,25 @@ test.describe('Extract Inline HTML URL Validation Security Tests', () => {
       'http://[::ffff:169.254.169.254]/',
       'http://[::ffff:a9fe:a9fe]/',
       'http://[fe80::c9a:d9a:19a:29a]/',
+      'http://[fe90::1]/',
+      'http://[febf::1]/',
       'http://[fd00:ec2::254]/',
+      'http://[fc00::1]/',
+      'http://[fd12:3456:789a:1::1]/',
+      'http://[ff02::1]/',
       'http://0xa9fea9fe/',
       'http://0251.0376.0251.0376/',
       'http://2852039166/',
+      'http://100.64.0.1/',
+      'http://100.127.255.254/',
+      'http://198.18.0.1/',
+      'http://198.19.255.254/',
+      'http://224.0.0.1/',
+      'http://240.0.0.1/',
+      'http://255.255.255.255/',
     ];
     for (const url of blockedUrls) {
-      assert.strictEqual(checkUrl(url), false, `Expected loopback/private/link-local/metadata URL to be blocked: ${url}`);
+      assert.strictEqual(checkUrl(url), false, `Expected loopback/private/link-local/metadata/multicast URL to be blocked: ${url}`);
     }
   });
 });
