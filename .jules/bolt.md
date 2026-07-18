@@ -1,5 +1,9 @@
 # Bolt's Journal
 
+## 2026-03-05 - [Caching realpath resolution and avoiding try-catch overhead in path traversal checks]
+**Learning:** During path safety validation, resolving physical paths via `fs.realpathSync` for files that do not exist results in slow synchronous exceptions. By checking `fs.existsSync` first and caching the canonical paths in a local `Map`, we completely eliminate disk access bottleneck and exception overhead for duplicate and non-existent assets.
+**Action:** Always cache synchronous filesystem validation results and avoid relying on try-catch blocks for control flow of common non-existent path lookups.
+
 ## 2026-03-05 - [Caching file system reads and resolution during static HTML extraction]
 **Learning:** During static HTML extraction and post-processing, inlining local images and CSS url() assets reads from and queries the filesystem repeatedly. By adding scoped, execution-local caches inside `inlineImages`, we avoid redundant IO and stats queries for duplicate assets.
 **Action:** Use local Map-based caches scoped to functions performing file reads or network requests to handle duplicate references efficiently.
