@@ -448,12 +448,13 @@ function extractCssUrls(text: string): CssUrlRef[] {
   const len = text.length;
 
   while (i < len) {
+    const char = text[i];
     // Look for 'url(' — case insensitive
     if (
       i + 3 < len &&
-      text[i].toLowerCase() === 'u' &&
-      text[i + 1].toLowerCase() === 'r' &&
-      text[i + 2].toLowerCase() === 'l' &&
+      (char === 'u' || char === 'U') &&
+      (text[i + 1] === 'r' || text[i + 1] === 'R') &&
+      (text[i + 2] === 'l' || text[i + 2] === 'L') &&
       text[i + 3] === '('
     ) {
       const urlStart = i;

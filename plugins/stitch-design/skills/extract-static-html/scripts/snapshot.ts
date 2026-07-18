@@ -531,12 +531,13 @@ async function snapshot(opts: Opts): Promise<void> {
           const len = cssText.length;
 
           while (i < len) {
+            const char = cssText[i];
             // Look for 'url(' — case insensitive
             if (
               i + 3 < len &&
-              cssText[i].toLowerCase() === 'u' &&
-              cssText[i + 1].toLowerCase() === 'r' &&
-              cssText[i + 2].toLowerCase() === 'l' &&
+              (char === 'u' || char === 'U') &&
+              (cssText[i + 1] === 'r' || cssText[i + 1] === 'R') &&
+              (cssText[i + 2] === 'l' || cssText[i + 2] === 'L') &&
               cssText[i + 3] === '('
             ) {
               const urlStart = i;
