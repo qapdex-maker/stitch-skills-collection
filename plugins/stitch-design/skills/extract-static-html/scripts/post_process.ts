@@ -226,6 +226,7 @@ function extractCssUrls(text: string): CssUrlRef[] {
 
 // Cache resolved real paths to avoid redundant and expensive synchronous physical disk IO queries and path lookups
 const realpathCache = new Map<string, string>();
+const isFileCache = new Map<string, boolean>();
 
 function getRealPath(p: string): string {
   const resolved = path.resolve(p);
@@ -281,9 +282,15 @@ export function resolveLocalFile(localPath: string, baseDir: string): string | n
     try {
       const resolved = path.resolve(candidate);
       if (isSafePath(resolved, safeRoot)) {
-        if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
-          // Resolve symlinks to their canonical physical path (defense-in-depth)
-          return fs.realpathSync(resolved);
+        const canonical = getRealPath(resolved);
+        let isFile = isFileCache.get(canonical);
+        if (isFile === undefined) {
+          isFile = fs.existsSync(canonical) && fs.statSync(canonical).isFile();
+          isFileCache.set(canonical, isFile);
+        }
+        if (isFile) {
+          // Canonical path resolved from getRealPath is already resolved to physical path (defense-in-depth)
+          return canonical;
         }
       }
     } catch {
