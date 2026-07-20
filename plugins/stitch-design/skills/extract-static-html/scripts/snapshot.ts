@@ -210,7 +210,7 @@ export function isSafeUrl(urlStr: string): boolean {
     const cleanHost = hostname.replace(/^\[|\]$/g, '');
     // Block IPv6 link-local addresses (fe80::/10) and AWS IPv6 metadata address
     if (
-      cleanHost.startsWith('fe80:') ||
+      /^fe[89ab][0-9a-f]:/i.test(cleanHost) ||
       cleanHost === 'fd00:ec2::254'
     ) {
       return false;

@@ -27,3 +27,8 @@
 **Vulnerability:** The SSRF validation filter `isSafeUrl` in `extract_inline_html.ts` blocked standard IPv4 private and link-local ranges, but omitted Carrier-Grade NAT (100.64.0.0/10), Benchmark testing (198.18.0.0/15), Multicast (224.0.0.0/4), Unique Local IPv6 (fc00::/7), complete Link-Local IPv6 (fe80::/10), and Multicast IPv6 (ff00::/8) address spaces. This allowed potential SSRF against internal services residing on these subnets.
 **Learning:** Robust SSRF prevention must cover all private, local, multicast, and benchmarking IP allocations defined by IETF RFCs across both IPv4 and IPv6 families, rather than just standard loopback/private/metadata ranges.
 **Prevention:** Apply a comprehensive list of IPv4 address boundary checks and use precise hex/digit-based regular expressions for IPv6 families to catch all non-routable, multicast, link-local, and unique-local scopes.
+
+## 2026-03-09 - IPv6 Link-Local SSRF Blocklist Bypass via prefix-based matches
+**Vulnerability:** In `snapshot.ts`, the URL validation routine `isSafeUrl` blocked standard cloud metadata addresses and IPv6 link-local addresses but only verified if the hostname started with exactly `"fe80:"`. This omitted other parts of the standard IPv6 link-local block (`fe80::/10`) such as `fe90::/10`, `fea0::/10`, and `feb0::/10`, allowing potential SSRF against services residing on these link-local subnets.
+**Learning:** Simple string prefix checks like `startsWith('fe80:')` are insufficient for IPv6 address ranges since addresses can fall under wider prefix allocations (like `/10` subnetting).
+**Prevention:** Always use precise hex/digit-based regular expressions (e.g. `/^fe[89ab][0-9a-f]:/i`) to block entire prefix-allocated subnets like `fe80::/10` across all services.
