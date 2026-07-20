@@ -47,6 +47,15 @@ function isSafeUrlExtract(parsed: URL): boolean {
   const ipToCheck = mappedIpv4 || hostname;
 
   const cleanHost = hostname.replace(/^\[|\]$/g, '');
+
+  // Block standard cloud metadata DNS names (SSRF protection)
+  if (
+    cleanHost === 'metadata.google.internal' ||
+    cleanHost === 'metadata'
+  ) {
+    return false;
+  }
+
   if (
     cleanHost === 'localhost' ||
     cleanHost === '::1' ||
@@ -365,6 +374,9 @@ test.describe('Snapshot URL Validation Security Tests', () => {
     const metadataUrls = [
       'http://169.254.169.254/latest/meta-data/',
       'https://169.254.169.254/metadata',
+      'http://169.254.10.10/some-resource',
+      'http://metadata.google.internal/computeMetadata/v1/',
+      'http://metadata/',
       'http://[fd00:ec2::254]/latest/meta-data/',
       'http://[fe80::c9a:d9a:19a:29a]/',
       'http://[fe90::1]/',
@@ -418,6 +430,8 @@ test.describe('Extract Inline HTML URL Validation Security Tests', () => {
     const blockedUrls = [
       'http://localhost:3000',
       'http://127.0.0.1:8080',
+      'http://metadata.google.internal/computeMetadata/v1/',
+      'http://metadata/',
       'http://[::1]/',
       'http://[::]/',
       'http://[::ffff:127.0.0.1]/',
