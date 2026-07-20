@@ -1,47 +1,53 @@
 // Example: Authentication Layout with shadcn/ui
 // Demonstrates: Layout composition, card usage, form integration
 
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useState } from "react"
-import { Eye, EyeOff, Loader2 } from "lucide-react"
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState } from "react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 export function AuthLayout() {
-  const [isLoading, setIsLoading] = useState<boolean>(false)
-  const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false)
-  const [showRegisterPassword, setShowRegisterPassword] = useState<boolean>(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false)
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
+  const [showRegisterPassword, setShowRegisterPassword] =
+    useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState<boolean>(false);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsLoading(true)
+    event.preventDefault();
+    setIsLoading(true);
 
     // Simulate API call
     setTimeout(() => {
-      setIsLoading(false)
-    }, 2000)
+      setIsLoading(false);
+    }, 2000);
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40">
       <Tabs defaultValue="login" className="w-[400px]">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="login">Login</TabsTrigger>
-          <TabsTrigger value="register">Register</TabsTrigger>
+          <TabsTrigger value="login" disabled={isLoading}>
+            Login
+          </TabsTrigger>
+          <TabsTrigger value="register" disabled={isLoading}>
+            Register
+          </TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="login">
           <Card>
             <CardHeader>
@@ -54,18 +60,25 @@ export function AuthLayout() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">
-                    Email <span className="text-destructive" aria-hidden="true">*</span>
+                    Email{" "}
+                    <span className="text-destructive" aria-hidden="true">
+                      *
+                    </span>
                   </Label>
                   <Input
                     id="email"
                     type="email"
                     placeholder="m@example.com"
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">
-                    Password <span className="text-destructive" aria-hidden="true">*</span>
+                    Password{" "}
+                    <span className="text-destructive" aria-hidden="true">
+                      *
+                    </span>
                   </Label>
                   <div className="relative">
                     <Input
@@ -73,13 +86,17 @@ export function AuthLayout() {
                       type={showLoginPassword ? "text" : "password"}
                       className="pr-10"
                       required
+                      disabled={isLoading}
                     />
                     <button
                       type="button"
                       onClick={() => setShowLoginPassword(!showLoginPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-                      aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showLoginPassword ? "Hide password" : "Show password"
+                      }
                       aria-pressed={showLoginPassword}
+                      disabled={isLoading}
                     >
                       {showLoginPassword ? (
                         <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -91,13 +108,12 @@ export function AuthLayout() {
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col space-y-4">
-                <Button 
-                  type="submit" 
-                  className="w-full"
-                  disabled={isLoading}
-                >
+                <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    <Loader2
+                      className="mr-2 h-4 w-4 animate-spin"
+                      aria-hidden="true"
+                    />
                   )}
                   {isLoading ? "Signing in..." : "Sign in"}
                 </Button>
@@ -105,6 +121,7 @@ export function AuthLayout() {
                   type="button"
                   variant="link"
                   className="w-full text-sm text-muted-foreground"
+                  disabled={isLoading}
                 >
                   Forgot password?
                 </Button>
@@ -112,7 +129,7 @@ export function AuthLayout() {
             </form>
           </Card>
         </TabsContent>
-        
+
         <TabsContent value="register">
           <Card>
             <CardHeader>
@@ -125,28 +142,39 @@ export function AuthLayout() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">
-                    Name <span className="text-destructive" aria-hidden="true">*</span>
+                    Name{" "}
+                    <span className="text-destructive" aria-hidden="true">
+                      *
+                    </span>
                   </Label>
                   <Input
                     id="name"
                     placeholder="John Doe"
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="register-email">
-                    Email <span className="text-destructive" aria-hidden="true">*</span>
+                    Email{" "}
+                    <span className="text-destructive" aria-hidden="true">
+                      *
+                    </span>
                   </Label>
                   <Input
                     id="register-email"
                     type="email"
                     placeholder="m@example.com"
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="register-password">
-                    Password <span className="text-destructive" aria-hidden="true">*</span>
+                    Password{" "}
+                    <span className="text-destructive" aria-hidden="true">
+                      *
+                    </span>
                   </Label>
                   <div className="relative">
                     <Input
@@ -154,13 +182,19 @@ export function AuthLayout() {
                       type={showRegisterPassword ? "text" : "password"}
                       className="pr-10"
                       required
+                      disabled={isLoading}
                     />
                     <button
                       type="button"
-                      onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                      onClick={() =>
+                        setShowRegisterPassword(!showRegisterPassword)
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-                      aria-label={showRegisterPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showRegisterPassword ? "Hide password" : "Show password"
+                      }
                       aria-pressed={showRegisterPassword}
+                      disabled={isLoading}
                     >
                       {showRegisterPassword ? (
                         <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -172,7 +206,10 @@ export function AuthLayout() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirm-password">
-                    Confirm Password <span className="text-destructive" aria-hidden="true">*</span>
+                    Confirm Password{" "}
+                    <span className="text-destructive" aria-hidden="true">
+                      *
+                    </span>
                   </Label>
                   <div className="relative">
                     <Input
@@ -180,13 +217,21 @@ export function AuthLayout() {
                       type={showConfirmPassword ? "text" : "password"}
                       className="pr-10"
                       required
+                      disabled={isLoading}
                     />
                     <button
                       type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-                      aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                      aria-label={
+                        showConfirmPassword
+                          ? "Hide confirm password"
+                          : "Show confirm password"
+                      }
                       aria-pressed={showConfirmPassword}
+                      disabled={isLoading}
                     >
                       {showConfirmPassword ? (
                         <EyeOff className="h-4 w-4" aria-hidden="true" />
@@ -198,13 +243,12 @@ export function AuthLayout() {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button 
-                  type="submit" 
-                  className="w-full"
-                  disabled={isLoading}
-                >
+                <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    <Loader2
+                      className="mr-2 h-4 w-4 animate-spin"
+                      aria-hidden="true"
+                    />
                   )}
                   {isLoading ? "Creating account..." : "Create account"}
                 </Button>
@@ -214,12 +258,12 @@ export function AuthLayout() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }
 
 /**
  * Key Patterns Demonstrated:
- * 
+ *
  * 1. Layout Composition: Centered authentication card with full-height viewport
  * 2. Card Usage: Structured content with header, body, and footer
  * 3. Tabs: Switch between login and register forms
@@ -227,17 +271,17 @@ export function AuthLayout() {
  * 5. Loading States: Button disabled state during form submission
  * 6. Responsive Design: Mobile-friendly with max-width constraint
  * 7. Tailwind Utilities: Using spacing, flexbox, and grid utilities
- * 
+ *
  * Design Choices:
  * - Minimal, clean interface focusing on the task at hand
  * - Proper semantic HTML with form elements
  * - Accessible labels and inputs
  * - Clear visual hierarchy with card components
  * - Loading feedback for better UX
- * 
+ *
  * Required Dependencies:
  * None beyond React and shadcn/ui components
- * 
+ *
  * Installation:
  * npx shadcn@latest add card
  * npx shadcn@latest add input
