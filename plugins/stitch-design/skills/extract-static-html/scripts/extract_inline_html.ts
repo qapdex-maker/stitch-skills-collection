@@ -280,6 +280,15 @@ export function isSafeUrl(parsed: URL): boolean {
   const ipToCheck = mappedIpv4 || hostname;
 
   const cleanHost = hostname.replace(/^\[|\]$/g, '');
+
+  // Block standard cloud metadata DNS names (SSRF protection)
+  if (
+    cleanHost === 'metadata.google.internal' ||
+    cleanHost === 'metadata'
+  ) {
+    return false;
+  }
+
   // Block localhost, loopback, link-local, unique local, multicast, and unspecified/all-zero IPv6 addresses
   if (
     cleanHost === 'localhost' ||

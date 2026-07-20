@@ -201,13 +201,25 @@ export function isSafeUrl(urlStr: string): boolean {
     const mappedIpv4 = ip6ToIpv4(hostname);
     const ipToCheck = mappedIpv4 || hostname;
 
-    // Block standard cloud metadata services (SSRF protection)
-    // 169.254.169.254 is the standard IPv4 link-local/metadata address
-    if (ipToCheck === '169.254.169.254') {
+    const cleanHost = hostname.replace(/^\[|\]$/g, '');
+
+    // Block standard cloud metadata DNS names (SSRF protection)
+    if (
+      cleanHost === 'metadata.google.internal' ||
+      cleanHost === 'metadata'
+    ) {
       return false;
     }
 
-    const cleanHost = hostname.replace(/^\[|\]$/g, '');
+    // Block private/untrusted link-local IPv4 ranges (169.254.0.0/16)
+    const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4Match) {
+      const [, a, b] = ipv4Match.map(Number);
+      if (a === 169 && b === 254) {
+        return false;
+      }
+    }
+
     // Block IPv6 link-local addresses (fe80::/10) and AWS IPv6 metadata address
     if (
       /^fe[89ab][0-9a-f]:/i.test(cleanHost) ||
