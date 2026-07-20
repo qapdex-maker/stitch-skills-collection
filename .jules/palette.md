@@ -13,3 +13,7 @@
 ## 2026-11-20 - Remotion Image Slide Accessibility
 **Learning:** In video rendering and presentation frameworks like Remotion, individual images (such as screenshots loaded via `<Img>`) that act as content slides must have descriptive `alt` text. Simply rendering them with zero descriptive fields leaves screen readers without context during slideshow previews. Binding the slide's `title` as the image `alt` property guarantees that assistive technologies can read out the current visual slide's context.
 **Action:** Always provide the `alt` property matching the corresponding slide title for image slide components within video presentation templates.
+
+## 2026-11-21 - Locking Down Tabbed Form Submissions
+**Learning:** In multi-tabbed interactive form patterns (such as authentication layouts), users can switch tabs or edit sibling fields while one form is in the middle of submission unless all interactive elements are explicitly disabled. Disabling `TabsTrigger` buttons, password visibility toggles, standard inputs, and help links via the active submission state (`isLoading` or `isSubmitting`) prevents interrupted states and double submissions.
+**Action:** Always disable all form fields, toggle buttons, tab list triggers, and other action buttons during active submission states to guarantee a cohesive and secure user experience.
