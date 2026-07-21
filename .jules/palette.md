@@ -17,3 +17,7 @@
 ## 2026-11-21 - Locking Down Tabbed Form Submissions
 **Learning:** In multi-tabbed interactive form patterns (such as authentication layouts), users can switch tabs or edit sibling fields while one form is in the middle of submission unless all interactive elements are explicitly disabled. Disabling `TabsTrigger` buttons, password visibility toggles, standard inputs, and help links via the active submission state (`isLoading` or `isSubmitting`) prevents interrupted states and double submissions.
 **Action:** Always disable all form fields, toggle buttons, tab list triggers, and other action buttons during active submission states to guarantee a cohesive and secure user experience.
+
+## 2026-12-05 - Real-Time Character Counters for Limited Form Inputs
+**Learning:** When form inputs have strict character limits enforced by backend schemas or validation (such as a 160-character bio limit), displaying the current character count in real-time provides immediate, friendly UX guidance. To ensure accessibility for screen readers, the dynamic count element must have an `aria-live="polite"` attribute so assistive technologies can gracefully announce changes as the user types without interrupting their flow.
+**Action:** Always include a visual character counter paired with `aria-live="polite"` and a clear warning style (e.g., `text-destructive`) on input fields that enforce maximum length constraints.
