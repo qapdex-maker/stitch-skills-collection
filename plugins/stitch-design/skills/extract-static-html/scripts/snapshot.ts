@@ -517,16 +517,28 @@ async function snapshot(opts: Opts): Promise<void> {
           batchSize: number,
           fn: (item: T) => Promise<R>,
         ): Promise<(R | null)[]> => {
-          const results: (R | null)[] = [];
-          for (let i = 0; i < items.length; i += batchSize) {
-            const batch = items.slice(i, i + batchSize);
-            const batchResults = await Promise.allSettled(batch.map(fn));
-            results.push(
-              ...batchResults.map((r) =>
-                r.status === 'fulfilled' ? r.value : null,
-              ),
-            );
+          // Bolt optimization: Replace sequential chunk/batch processing with a worker pool/sliding-window queue.
+          // This eliminates head-of-line blocking when slow resource fetches block later fast assets.
+          const results = new Array<(R | null)>(items.length);
+          let index = 0;
+          const workers: Promise<void>[] = [];
+
+          const worker = async () => {
+            while (index < items.length) {
+              const curIndex = index++;
+              try {
+                results[curIndex] = await fn(items[curIndex]);
+              } catch {
+                results[curIndex] = null;
+              }
+            }
+          };
+
+          const count = Math.min(batchSize, items.length);
+          for (let w = 0; w < count; w++) {
+            workers.push(worker());
           }
+          await Promise.all(workers);
           return results;
         },
 

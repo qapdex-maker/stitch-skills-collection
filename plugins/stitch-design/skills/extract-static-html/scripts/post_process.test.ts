@@ -395,6 +395,108 @@ test.describe('Snapshot URL Validation Security Tests', () => {
   });
 });
 
+test.describe('processInBatches sliding window optimization tests', () => {
+  const processInBatches = async <T, R>(
+    items: T[],
+    batchSize: number,
+    fn: (item: T) => Promise<R>,
+  ): Promise<(R | null)[]> => {
+    const results = new Array<(R | null)>(items.length);
+    let index = 0;
+    const workers: Promise<void>[] = [];
+
+    const worker = async () => {
+      while (index < items.length) {
+        const curIndex = index++;
+        try {
+          results[curIndex] = await fn(items[curIndex]);
+        } catch {
+          results[curIndex] = null;
+        }
+      }
+    };
+
+    const count = Math.min(batchSize, items.length);
+    for (let w = 0; w < count; w++) {
+      workers.push(worker());
+    }
+    await Promise.all(workers);
+    return results;
+  };
+
+  test('should process all items in correct order', async () => {
+    const items = [1, 2, 3, 4, 5];
+    const results = await processInBatches(items, 2, async (x) => x * 2);
+    assert.deepStrictEqual(results, [2, 4, 6, 8, 10]);
+  });
+
+  test('should handle empty input array correctly', async () => {
+    const results = await processInBatches([], 3, async (x) => x);
+    assert.deepStrictEqual(results, []);
+  });
+
+  test('should handle input size smaller than batch size', async () => {
+    const items = [10, 20];
+    const results = await processInBatches(items, 5, async (x) => x + 1);
+    assert.deepStrictEqual(results, [11, 21]);
+  });
+
+  test('should catch errors and handle rejected promises gracefully', async () => {
+    const items = ['ok', 'fail', 'ok2'];
+    const results = await processInBatches(items, 2, async (x) => {
+      if (x === 'fail') throw new Error('forced failure');
+      return x.toUpperCase();
+    });
+    assert.deepStrictEqual(results, ['OK', null, 'OK2']);
+  });
+
+  test('should prevent head-of-line blocking (sliding window / worker pool optimization)', async () => {
+    const items = ['slow', 'fast1', 'fast2'];
+    const startTime = Date.now();
+
+    const results = await processInBatches(items, 2, async (x) => {
+      if (x === 'slow') {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return 'slow_done';
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return x + '_done';
+      }
+    });
+
+    const duration = Date.now() - startTime;
+    assert.deepStrictEqual(results, ['slow_done', 'fast1_done', 'fast2_done']);
+    assert.ok(duration < 90, `Expected duration to be less than 90ms (actual: ${duration}ms) due to sliding window concurrency`);
+  });
+
+  test('should prevent head-of-line blocking deterministically without timing sensitivity', async () => {
+    const items = ['slow', 'fast1', 'fast2'];
+    const events: string[] = [];
+
+    await processInBatches(items, 2, async (x) => {
+      events.push(`start:${x}`);
+      if (x === 'slow') {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      events.push(`end:${x}`);
+      return x;
+    });
+
+    const expected = [
+      'start:slow',
+      'start:fast1',
+      'end:fast1',
+      'start:fast2',
+      'end:fast2',
+      'end:slow'
+    ];
+
+    assert.deepStrictEqual(events, expected, 'Worker pool did not execute tasks in a non-blocking sliding window sequence');
+  });
+});
+
 test.describe('Extract Inline HTML URL Validation Security Tests', () => {
   const checkUrl = (urlStr: string): boolean => {
     try {
