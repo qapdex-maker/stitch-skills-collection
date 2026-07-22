@@ -488,21 +488,38 @@ function extractCssUrls(text: string): CssUrlRef[] {
       // Read the URL value
       let url = '';
       if (quote) {
+        const urlStartIdx = i;
+        let hasEscape = false;
         while (i < len && text[i] !== quote) {
           if (text[i] === '\\' && i + 1 < len) {
-            i++;
-            url += text[i];
+            hasEscape = true;
+            i += 2;
           } else {
-            url += text[i];
+            i++;
           }
-          i++;
+        }
+        if (hasEscape) {
+          url = '';
+          let j = urlStartIdx;
+          while (j < i) {
+            if (text[j] === '\\' && j + 1 < i) {
+              j++;
+              url += text[j];
+            } else {
+              url += text[j];
+            }
+            j++;
+          }
+        } else {
+          url = text.substring(urlStartIdx, i);
         }
         if (i < len) i++; // closing quote
       } else {
+        const urlStartIdx = i;
         while (i < len && text[i] !== ')' && text[i] !== ' ' && text[i] !== '\t' && text[i] !== '\n') {
-          url += text[i];
           i++;
         }
+        url = text.substring(urlStartIdx, i);
       }
 
       // Skip trailing whitespace before ')'

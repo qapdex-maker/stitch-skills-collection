@@ -18,7 +18,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
 import fs from 'node:fs';
-import { isSafePath, resolveLocalFile } from './post_process.js';
+import { isSafePath, resolveLocalFile, extractCssUrls } from './post_process.js';
 import { isSafeUrl as isSafeUrlSnapshot } from './snapshot.js';
 
 // Local copy of isSafeUrl and ip6ToIpv4 from extract_inline_html.ts to avoid requiring @babel/parser dependency in unit tests
@@ -394,6 +394,45 @@ test.describe('Snapshot URL Validation Security Tests', () => {
     for (const url of metadataUrls) {
       assert.strictEqual(isSafeUrlSnapshot(url), false, `Expected link-local/metadata URL to be blocked by snapshot: ${url}`);
     }
+  });
+});
+
+test.describe('extractCssUrls parser tests', () => {
+  test('should parse standard quoted and unquoted urls correctly', () => {
+    const css = `
+      body {
+        background: url('foo.png');
+        background-image: url("bar.jpg");
+        list-style: url(baz.gif);
+      }
+    `;
+    const urls = extractCssUrls(css);
+    assert.strictEqual(urls.length, 3);
+    assert.strictEqual(urls[0].url, 'foo.png');
+    assert.strictEqual(urls[1].url, 'bar.jpg');
+    assert.strictEqual(urls[2].url, 'baz.gif');
+  });
+
+  test('should parse urls with escapes and whitespace correctly', () => {
+    const css = `
+      body {
+        background: url(   "escaped\\\\quote.png"   );
+      }
+    `;
+    const urls = extractCssUrls(css);
+    assert.strictEqual(urls.length, 1);
+    assert.strictEqual(urls[0].url, 'escaped\\quote.png');
+  });
+
+  test('should ignore malformed urls', () => {
+    const css = `
+      body {
+        background: url(unclosed;
+        background: url('unclosed-quote);
+      }
+    `;
+    const urls = extractCssUrls(css);
+    assert.strictEqual(urls.length, 0);
   });
 });
 

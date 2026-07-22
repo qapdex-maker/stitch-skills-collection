@@ -611,19 +611,36 @@ async function snapshot(opts: Opts): Promise<void> {
               // Read the URL value
               let url = '';
               if (quote) {
+                const urlStartIdx = i;
+                let hasEscape = false;
                 // Quoted: read until matching unescaped quote
                 while (i < len && cssText[i] !== quote) {
                   if (cssText[i] === '\\' && i + 1 < len) {
-                    i++; // skip backslash
-                    url += cssText[i]; // include next char literally
+                    hasEscape = true;
+                    i += 2;
                   } else {
-                    url += cssText[i];
+                    i++;
                   }
-                  i++;
+                }
+                if (hasEscape) {
+                  url = '';
+                  let j = urlStartIdx;
+                  while (j < i) {
+                    if (cssText[j] === '\\' && j + 1 < i) {
+                      j++;
+                      url += cssText[j];
+                    } else {
+                      url += cssText[j];
+                    }
+                    j++;
+                  }
+                } else {
+                  url = cssText.substring(urlStartIdx, i);
                 }
                 if (i < len) i++; // skip closing quote
               } else {
                 // Unquoted: stop at ) or whitespace (per CSS spec)
+                const urlStartIdx = i;
                 while (
                   i < len &&
                   cssText[i] !== ')' &&
@@ -632,9 +649,9 @@ async function snapshot(opts: Opts): Promise<void> {
                   cssText[i] !== '\n' &&
                   cssText[i] !== '\r'
                 ) {
-                  url += cssText[i];
                   i++;
                 }
+                url = cssText.substring(urlStartIdx, i);
               }
 
               // Skip trailing whitespace before ')'
