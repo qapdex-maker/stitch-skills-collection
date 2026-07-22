@@ -284,7 +284,17 @@ export function isSafeUrl(parsed: URL): boolean {
   // Block standard cloud metadata DNS names (SSRF protection)
   if (
     cleanHost === 'metadata.google.internal' ||
-    cleanHost === 'metadata'
+    cleanHost === 'metadata' ||
+    cleanHost === 'instance.metadata.azure.com'
+  ) {
+    return false;
+  }
+
+  // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
+  if (
+    ipToCheck === '100.100.100.200' ||
+    ipToCheck === '192.0.0.192' ||
+    ipToCheck === '168.63.129.16'
   ) {
     return false;
   }

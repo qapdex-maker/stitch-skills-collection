@@ -51,7 +51,17 @@ function isSafeUrlExtract(parsed: URL): boolean {
   // Block standard cloud metadata DNS names (SSRF protection)
   if (
     cleanHost === 'metadata.google.internal' ||
-    cleanHost === 'metadata'
+    cleanHost === 'metadata' ||
+    cleanHost === 'instance.metadata.azure.com'
+  ) {
+    return false;
+  }
+
+  // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
+  if (
+    ipToCheck === '100.100.100.200' ||
+    ipToCheck === '192.0.0.192' ||
+    ipToCheck === '168.63.129.16'
   ) {
     return false;
   }
@@ -390,6 +400,8 @@ test.describe('Snapshot URL Validation Security Tests', () => {
       'http://[::ffff:a9fe:a9fe]:8080/path',
       'http://100.100.100.200/',
       'http://instance.metadata.azure.com/',
+      'http://192.0.0.192/',
+      'http://168.63.129.16/',
     ];
     for (const url of metadataUrls) {
       assert.strictEqual(isSafeUrlSnapshot(url), false, `Expected link-local/metadata URL to be blocked by snapshot: ${url}`);
@@ -605,6 +617,9 @@ test.describe('Extract Inline HTML URL Validation Security Tests', () => {
       'http://224.0.0.1/',
       'http://240.0.0.1/',
       'http://255.255.255.255/',
+      'http://instance.metadata.azure.com/',
+      'http://192.0.0.192/',
+      'http://168.63.129.16/',
     ];
     for (const url of blockedUrls) {
       assert.strictEqual(checkUrl(url), false, `Expected loopback/private/link-local/metadata/multicast URL to be blocked: ${url}`);
