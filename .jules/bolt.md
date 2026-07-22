@@ -11,3 +11,7 @@
 ## 2026-03-05 - [Parallel Batch Prefetching & Promise Coalescing in Remote Image Extraction]
 **Learning:** When embedding remote images and assets during static HTML extraction, serial/sequential prefetching phases (e.g. images first, then CSS, then posters) introduce significant head-of-line blocking. Furthermore, concurrent duplicate assets can cause duplicate simultaneous requests without coalescing.
 **Action:** Extract all unique remote asset URLs upfront into a single Set, fetch them concurrently in a flat parallel batch, and use an active fetch Promise cache to coalescing duplicate requests. Re-extract indices dynamically during the replacement phases to prevent character-index shift document corruption.
+
+## 2026-03-05 - [Sliding-Window Worker Pool to Prevent Head-of-Line Blocking]
+**Learning:** In asynchronous batch operations (e.g. parallelizing resource/image fetches in browser page contexts), standard chunking loops (like chunks of Promise.all) suffer from severe head-of-line blocking, throttling the entire chunk to the speed of the single slowest asset or timeout. Replaced sequential chunking with a continuous worker pool/sliding-window queue that allows workers to immediately pull new tasks from a shared cursor.
+**Action:** Use a sliding-window queue/worker pool pattern rather than batch-by-batch waiting when processing network tasks with highly variable latencies.
