@@ -206,8 +206,14 @@ export function isSafeUrl(urlStr: string): boolean {
     // Block standard cloud metadata DNS names (SSRF protection)
     if (
       cleanHost === 'metadata.google.internal' ||
-      cleanHost === 'metadata'
+      cleanHost === 'metadata' ||
+      cleanHost === 'instance.metadata.azure.com'
     ) {
+      return false;
+    }
+
+    // Block Alibaba Cloud IMDS metadata IP (100.100.100.200)
+    if (ipToCheck === '100.100.100.200') {
       return false;
     }
 
@@ -353,6 +359,23 @@ async function snapshot(opts: Opts): Promise<void> {
 
     const page = await browser.newPage();
     await page.setViewport({ width, height });
+
+    // Enable Request Interception to prevent SSRF and redirect bypasses (defense-in-depth)
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      const reqUrl = request.url();
+      // Allow data:, blob:, and about: protocols as they are local and do not make outbound network requests
+      if (reqUrl.startsWith('data:') || reqUrl.startsWith('blob:') || reqUrl.startsWith('about:')) {
+        request.continue();
+        return;
+      }
+      if (!isSafeUrl(reqUrl)) {
+        console.warn(`   [Blocked Unsafe Request] ${reqUrl}`);
+        request.abort();
+      } else {
+        request.continue();
+      }
+    });
 
     // Forward browser console logs to Node.js
     page.on('console', (msg) => {
