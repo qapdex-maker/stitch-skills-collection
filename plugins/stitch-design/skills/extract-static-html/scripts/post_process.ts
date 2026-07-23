@@ -23,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // ---------------------------------------------------------------------------
-// MIME type mapping
+// MIME type mapping & Static Regex patterns
 // ---------------------------------------------------------------------------
 const MIME_MAP: Record<string, string> = {
   '.svg': 'image/svg+xml',
@@ -39,6 +39,16 @@ const MIME_MAP: Record<string, string> = {
   '.tif': 'image/tiff',
   '.apng': 'image/apng',
   '.cur': 'image/x-icon',
+};
+
+const IMG_EXT_REGEX = /\.(svg|png|jpg|jpeg|gif|webp|avif|bmp|ico)$/i;
+const SVG_HREF_REGEX = /(href|xlink:href)="((?!https?:\/\/|data:|\/\/)[^"]+)"/g;
+
+// Static regex map for HTML attributes to avoid dynamic RegExp compilation during runtime loop
+const ATTR_REGEX_MAP: Record<string, RegExp> = {
+  src: /src="((?!https?:\/\/|data:|\/\/)[^"]+)"/g,
+  poster: /poster="((?!https?:\/\/|data:|\/\/)[^"]+)"/g,
+  data: /data="((?!https?:\/\/|data:|\/\/)[^"]+)"/g,
 };
 
 function getMime(filePath: string): string {
@@ -261,6 +271,8 @@ function getRealPath(p: string): string {
     real = resolved;
   }
   realpathCache.set(resolved, real);
+  // Also cache the canonical output path to guarantee duplicate lookup hits resolve O(1)
+  realpathCache.set(real, real);
   return real;
 }
 
@@ -298,8 +310,9 @@ export function resolveLocalFile(localPath: string, baseDir: string): string | n
   for (const candidate of candidates) {
     try {
       const resolved = path.resolve(candidate);
-      if (isSafePath(resolved, safeRoot)) {
-        const canonical = getRealPath(resolved);
+      // Reuse the canonical path to avoid multiple fs operations or redundant getRealPath lookups
+      const canonical = getRealPath(resolved);
+      if (isSafePath(canonical, safeRoot)) {
         let isFile = isFileCache.get(canonical);
         if (isFile === undefined) {
           isFile = fs.existsSync(canonical) && fs.statSync(canonical).isFile();
@@ -405,7 +418,8 @@ function inlineImages(
   // Handle src, poster, data attributes
   const srcAttrs = ['src', 'poster', 'data'];
   for (const attr of srcAttrs) {
-    const regex = new RegExp(`${attr}="((?!https?:\\/\\/|data:|\\/\\/)[^"]+)"`, 'g');
+    const regex = ATTR_REGEX_MAP[attr];
+    if (!regex) continue;
     html = html.replace(regex, (match: string, localPath: string) => {
       const resolved = getCachedResolvedFile(localPath);
       if (!resolved) {
@@ -471,10 +485,9 @@ function inlineImages(
   }
 
   // --- Inline SVG <image href="..."> and xlink:href ---
-  const svgHrefRegex = /(href|xlink:href)="((?!https?:\/\/|data:|\/\/)[^"]+)"/g;
-  html = html.replace(svgHrefRegex, (match: string, attrName: string, localPath: string) => {
-    // Skip non-image hrefs (like <a href>)
-    if (!localPath.match(/\.(svg|png|jpg|jpeg|gif|webp|avif|bmp|ico)$/i)) {
+  html = html.replace(SVG_HREF_REGEX, (match: string, attrName: string, localPath: string) => {
+    // Skip non-image hrefs (like <a href>) using lightning fast test operation
+    if (!IMG_EXT_REGEX.test(localPath)) {
       return match;
     }
 
