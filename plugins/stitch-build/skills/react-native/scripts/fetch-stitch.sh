@@ -19,10 +19,23 @@ if [ -z "$URL" ] || [ -z "$OUTPUT" ]; then
   echo "Usage: $0 <url> <output_path>"
   exit 1
 fi
+
+# Security: prevent option injection (CWE-88) and enforce protocol restriction at shell boundary
+if [[ ! "$URL" =~ ^https?:// ]]; then
+  echo "Error: URL must start with http:// or https://"
+  exit 1
+fi
+
+if [[ "$OUTPUT" == -* ]]; then
+  echo "Error: Output path cannot start with a hyphen"
+  exit 1
+fi
+
 mkdir -p "$(dirname "$OUTPUT")"
 echo "Initiating high-reliability fetch for Stitch HTML..."
 # Security: restrict protocols to HTTP/HTTPS to prevent protocol-based attacks (e.g. LFI/SSRF)
-curl -L -f -sS --proto =http,https --connect-timeout 10 --compressed "$URL" -o "$OUTPUT"
+# Use -- to separate options from arguments
+curl -L -f -sS --proto =http,https --connect-timeout 10 --compressed -o "$OUTPUT" -- "$URL"
 if [ $? -eq 0 ]; then
   echo "Successfully retrieved HTML at: $OUTPUT"
   exit 0
