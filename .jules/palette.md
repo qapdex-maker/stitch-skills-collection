@@ -21,3 +21,7 @@
 ## 2026-11-22 - Password Manager Integration and Browser Autofill Accessibility
 **Learning:** Modern login and registration forms often lack standard `autoComplete` attributes, preventing browser autofill tools and password managers from correctly identifying input purposes. Explicitly annotating input elements with semantic autocomplete values (such as `email`, `current-password`, `new-password`, and `name`) satisfies WCAG 1.3.5 (Identify Input Purpose) and significantly enhances mobile and desktop keyboard entry UX.
 **Action:** Always include explicit, semantic `autoComplete` attributes on authentication and user registration form fields to support seamless auto-filling and password manager synchronization.
+
+## 2026-11-23 - Interactive Inline Link Focus Indicators
+**Learning:** In dark-themed dashboard components, interactive inline links (such as usernames and repository names) frequently lack visual focus indicators. While `hover:underline` is commonly used for mouse users, keyboard-only navigators are left without clear visual feedback. Coupling `focus-visible:ring-1` with outline prevention and visible underlines on focus ensures WCAG 2.1 compliance without compromising the dark, high-fidelity design aesthetics.
+**Action:** Always provide custom `focus-visible:underline`, focus-visible rings, and custom roundings on all inline interactive links to ensure high keyboard-navigation visibility.
