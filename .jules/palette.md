@@ -17,3 +17,7 @@
 ## 2026-11-21 - Locking Down Tabbed Form Submissions
 **Learning:** In multi-tabbed interactive form patterns (such as authentication layouts), users can switch tabs or edit sibling fields while one form is in the middle of submission unless all interactive elements are explicitly disabled. Disabling `TabsTrigger` buttons, password visibility toggles, standard inputs, and help links via the active submission state (`isLoading` or `isSubmitting`) prevents interrupted states and double submissions.
 **Action:** Always disable all form fields, toggle buttons, tab list triggers, and other action buttons during active submission states to guarantee a cohesive and secure user experience.
+
+## 2026-11-22 - Password Manager Integration and Browser Autofill Accessibility
+**Learning:** Modern login and registration forms often lack standard `autoComplete` attributes, preventing browser autofill tools and password managers from correctly identifying input purposes. Explicitly annotating input elements with semantic autocomplete values (such as `email`, `current-password`, `new-password`, and `name`) satisfies WCAG 1.3.5 (Identify Input Purpose) and significantly enhances mobile and desktop keyboard entry UX.
+**Action:** Always include explicit, semantic `autoComplete` attributes on authentication and user registration form fields to support seamless auto-filling and password manager synchronization.
