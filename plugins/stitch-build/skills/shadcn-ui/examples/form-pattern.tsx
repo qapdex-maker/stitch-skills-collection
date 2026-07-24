@@ -72,6 +72,8 @@ export function UserProfileForm() {
     })
   }
 
+  const bioValue = form.watch("bio") || ""
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -143,7 +145,19 @@ export function UserProfileForm() {
           name="bio"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Bio</FormLabel>
+              <div className="flex items-center justify-between">
+                <FormLabel>Bio</FormLabel>
+                <span
+                  className={`text-xs ${
+                    (field.value || "").length > 160
+                      ? "text-destructive font-medium"
+                      : "text-muted-foreground"
+                  }`}
+                  aria-live="polite"
+                >
+                  {(field.value || "").length}/160
+                </span>
+              </div>
               <FormControl>
                 <Textarea
                   placeholder="Tell us about yourself"
@@ -153,10 +167,7 @@ export function UserProfileForm() {
               </FormControl>
               <FormDescription className="flex justify-between">
                 <span>Optional. Maximum 160 characters.</span>
-                <span
-                  className={bioValue.length > 160 ? "text-destructive font-medium" : "text-muted-foreground"}
-                  aria-live="polite"
-                >
+                <span className={bioValue.length > 160 ? "text-destructive font-medium" : "text-muted-foreground"}>
                   {bioValue.length}/160
                 </span>
               </FormDescription>
