@@ -73,6 +73,7 @@ export const ScreenSlide: React.FC<ScreenSlideProps> = ({
       >
         <Img
           src={imageSrc}
+          alt={title}
           style={{
             width: '100%',
             height: 'auto',

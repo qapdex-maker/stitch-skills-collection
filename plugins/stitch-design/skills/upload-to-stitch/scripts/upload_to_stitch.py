@@ -221,6 +221,17 @@ def parse_args():
 def main():
   args = parse_args()
 
+  # Enforce API URL starts with http:// or https:// (CWE-601/CWE-918)
+  if not (args.api_url.startswith("http://") or args.api_url.startswith("https://")):
+    print("Error: --api-url must start with http:// or https://")
+    sys.exit(1)
+
+  # Validate project ID format to prevent URL path injection or traversal (CWE-22)
+  import re
+  if not re.match(r"^[a-zA-Z0-9_-]+$", args.project_id):
+    print("Error: Invalid --project-id format. Must contain only alphanumeric, hyphens, and underscores.")
+    sys.exit(1)
+
   file_path = args.file_path
   file_suffix = file_path.suffix.lower()
   mime_type = _MIME_TYPES.get(file_suffix)

@@ -158,14 +158,26 @@ function validateOpts(opts: Opts): void {
     errors.push('No pages specified. Use --page src:dst:title');
   }
 
+  const resolvedOutdir = path.resolve(opts.outdir);
+  const safePrefix = resolvedOutdir.endsWith(path.sep) ? resolvedOutdir : resolvedOutdir + path.sep;
+
   for (const spec of opts.pages) {
     const parts = spec.split(':');
     if (parts.length !== 3) {
       errors.push(`Invalid page spec '${spec}'. Must be src:dst:title`);
     } else {
-      const [src] = parts;
+      const [src, dstName] = parts;
       if (!fs.existsSync(src)) {
         errors.push(`Source file not found: ${src}`);
+      }
+
+      // Security: prevent path traversal out of the designated output directory (CWE-22)
+      // Normalize backslashes to forward slashes for cross-platform safety
+      const normalizedDstName = dstName.replace(/\\/g, '/');
+      const dst = path.join(opts.outdir, normalizedDstName);
+      const resolvedDst = path.resolve(dst);
+      if (resolvedDst !== resolvedOutdir && !resolvedDst.startsWith(safePrefix)) {
+        errors.push(`Security Error: Destination path '${dstName}' escapes output directory '${opts.outdir}'`);
       }
     }
   }
@@ -237,6 +249,10 @@ const imgCache = new Map<string, string>();
 const activeFetches = new Map<string, Promise<string>>();
 const MAX_REDIRECTS = 5;
 
+// Bolt optimization: Extract static regex patterns used in embedImages to avoid dynamic RegExp compilation
+const SRC_URL_REGEX = /src="(https?:\/\/[^"]+)"/g;
+const POSTER_URL_REGEX = /poster="(https?:\/\/[^"]+)"/g;
+
 function isImageUrl(url: string): boolean {
   const skip = ['cdn.tailwindcss.com', 'fonts.googleapis.com', '.js', '.css'];
   return !skip.some((s) => url.includes(s));
@@ -245,26 +261,75 @@ function isImageUrl(url: string): boolean {
 
 
 /**
+ * Convert IPv4-mapped or IPv4-compatible IPv6 addresses (e.g. ::ffff:a9fe:a9fe, ::169.254.169.254)
+ * to their canonical IPv4 decimal representation.
+ */
+function ip6ToIpv4(ip6: string): string | null {
+  const clean = ip6.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!/^(?:0|:)+(?:ffff:)?(?:0:)?/i.test(clean)) return null;
+  const match = clean.match(/^(?:0|:)+(?:ffff:)?(?:0:)?([^:]+:[^:]+|(?:\d{1,3}\.){3}\d{1,3})$/);
+  if (!match) return null;
+  const part = match[1];
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(part)) return part;
+  const hexParts = part.split(':');
+  if (hexParts.length !== 2) return null;
+  const high = parseInt(hexParts[0], 16);
+  const low = parseInt(hexParts[1], 16);
+  if (isNaN(high) || isNaN(low)) return null;
+  return `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
+}
+
+/**
  * Validate that a URL is safe for outbound requests (SSRF protection).
  * Blocks private/internal network addresses and non-HTTP protocols.
  * URLs parsed from HTML files could be attacker-controlled, so we must
  * ensure they only target public internet hosts.
  */
-function isSafeUrl(parsed: URL): boolean {
+export function isSafeUrl(parsed: URL): boolean {
   // Only allow http and https protocols
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return false;
   }
 
   const hostname = parsed.hostname.toLowerCase();
+  const mappedIpv4 = ip6ToIpv4(hostname);
+  const ipToCheck = mappedIpv4 || hostname;
 
-  // Block localhost variants
-  if (hostname === 'localhost' || hostname === '[::1]') {
+  const cleanHost = hostname.replace(/^\[|\]$/g, '');
+
+  // Block standard cloud metadata DNS names (SSRF protection)
+  if (
+    cleanHost === 'metadata.google.internal' ||
+    cleanHost === 'metadata' ||
+    cleanHost === 'instance.metadata.azure.com'
+  ) {
     return false;
   }
 
-  // Block private/reserved IPv4 ranges
-  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
+  if (
+    ipToCheck === '100.100.100.200' ||
+    ipToCheck === '192.0.0.192' ||
+    ipToCheck === '168.63.129.16'
+  ) {
+    return false;
+  }
+
+  // Block localhost, loopback, link-local, unique local, multicast, and unspecified/all-zero IPv6 addresses
+  if (
+    cleanHost === 'localhost' ||
+    cleanHost === '::1' ||
+    cleanHost === '::' ||
+    /^[0:]+$/.test(cleanHost) ||        // all-zero IPv6
+    /^fe[89ab][0-9a-f]:/i.test(cleanHost) || // fe80::/10 (link-local)
+    /^f[cd][0-9a-f]{2}:/i.test(cleanHost) || // fc00::/7 (unique local address)
+    /^ff[0-9a-f]{2}:/i.test(cleanHost)  // ff00::/8 (multicast)
+  ) {
+    return false;
+  }
+
+  // Block private/reserved/untrusted IPv4 ranges
+  const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4Match) {
     const [, a, b] = ipv4Match.map(Number);
     if (
@@ -273,7 +338,10 @@ function isSafeUrl(parsed: URL): boolean {
       a === 0 ||            // 0.0.0.0/8    (unspecified)
       (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12 (private)
       (a === 192 && b === 168) ||          // 192.168.0.0/16 (private)
-      (a === 169 && b === 254)             // 169.254.0.0/16 (link-local)
+      (a === 169 && b === 254) ||          // 169.254.0.0/16 (link-local)
+      (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 (Carrier-Grade NAT)
+      (a === 198 && b >= 18 && b <= 19) || // 198.18.0.0/15 (Benchmark testing)
+      a >= 224             // 224.0.0.0/4 (Multicast/Reserved/Class E)
     ) {
       return false;
     }
@@ -421,12 +489,13 @@ function extractCssUrls(text: string): CssUrlRef[] {
   const len = text.length;
 
   while (i < len) {
+    const char = text[i];
     // Look for 'url(' — case insensitive
     if (
       i + 3 < len &&
-      text[i].toLowerCase() === 'u' &&
-      text[i + 1].toLowerCase() === 'r' &&
-      text[i + 2].toLowerCase() === 'l' &&
+      (char === 'u' || char === 'U') &&
+      (text[i + 1] === 'r' || text[i + 1] === 'R') &&
+      (text[i + 2] === 'l' || text[i + 2] === 'L') &&
       text[i + 3] === '('
     ) {
       const urlStart = i;
@@ -445,21 +514,48 @@ function extractCssUrls(text: string): CssUrlRef[] {
       // Read the URL value
       let url = '';
       if (quote) {
+        const urlStartIdx = i;
+        let hasEscape = false;
         while (i < len && text[i] !== quote) {
           if (text[i] === '\\' && i + 1 < len) {
-            i++;
-            url += text[i];
+            hasEscape = true;
+            i += 2;
           } else {
-            url += text[i];
+            i++;
           }
-          i++;
+        }
+        if (hasEscape) {
+          // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
+          // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
+          const parts: string[] = [];
+          let j = urlStartIdx;
+          let lastIdx = urlStartIdx;
+          while (j < i) {
+            if (text[j] === '\\' && j + 1 < i) {
+              if (j > lastIdx) {
+                parts.push(text.substring(lastIdx, j));
+              }
+              parts.push(text[j + 1]);
+              j += 2;
+              lastIdx = j;
+            } else {
+              j++;
+            }
+          }
+          if (j > lastIdx) {
+            parts.push(text.substring(lastIdx, j));
+          }
+          url = parts.join('');
+        } else {
+          url = text.substring(urlStartIdx, i);
         }
         if (i < len) i++; // closing quote
       } else {
+        const urlStartIdx = i;
         while (i < len && text[i] !== ')' && text[i] !== ' ' && text[i] !== '\t' && text[i] !== '\n') {
-          url += text[i];
           i++;
         }
+        url = text.substring(urlStartIdx, i);
       }
 
       // Skip trailing whitespace before ')'
@@ -502,7 +598,7 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
   const limit = createLimiter(concurrency);
 
   // --- Gather all image, CSS url, and video poster references from unmodified HTML ---
-  const srcMatches = [...html.matchAll(/src="(https?:\/\/[^"]+)"/g)];
+  const srcMatches = [...html.matchAll(SRC_URL_REGEX)];
   const srcImageMatches = srcMatches.filter((m) => isImageUrl(m[1]));
 
   const cssUrlRefs = extractCssUrls(html);
@@ -512,7 +608,7 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
       isImageUrl(ref.url),
   );
 
-  const posterMatches = [...html.matchAll(/poster="(https?:\/\/[^"]+)"/g)];
+  const posterMatches = [...html.matchAll(POSTER_URL_REGEX)];
 
   // Gather all unique URLs to prefetch in one flat set
   const urlsToPrefetch = new Set<string>();

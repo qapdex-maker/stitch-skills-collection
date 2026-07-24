@@ -171,6 +171,25 @@ Options:
  * to prevent headless browsers from exposing sensitive cloud instance credentials,
  * while still permitting local development access on localhost.
  */
+/**
+ * Convert IPv4-mapped or IPv4-compatible IPv6 addresses (e.g. ::ffff:a9fe:a9fe, ::169.254.169.254)
+ * to their canonical IPv4 decimal representation.
+ */
+function ip6ToIpv4(ip6: string): string | null {
+  const clean = ip6.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!/^(?:0|:)+(?:ffff:)?(?:0:)?/i.test(clean)) return null;
+  const match = clean.match(/^(?:0|:)+(?:ffff:)?(?:0:)?([^:]+:[^:]+|(?:\d{1,3}\.){3}\d{1,3})$/);
+  if (!match) return null;
+  const part = match[1];
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(part)) return part;
+  const hexParts = part.split(':');
+  if (hexParts.length !== 2) return null;
+  const high = parseInt(hexParts[0], 16);
+  const low = parseInt(hexParts[1], 16);
+  if (isNaN(high) || isNaN(low)) return null;
+  return `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
+}
+
 export function isSafeUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
@@ -179,18 +198,42 @@ export function isSafeUrl(urlStr: string): boolean {
     }
 
     const hostname = parsed.hostname.toLowerCase();
+    const mappedIpv4 = ip6ToIpv4(hostname);
+    const ipToCheck = mappedIpv4 || hostname;
 
-    // Block standard cloud metadata services (SSRF protection)
-    // 169.254.169.254 is the standard IPv4 link-local/metadata address
-    if (hostname === '169.254.169.254') {
+    const cleanHost = hostname.replace(/^\[|\]$/g, '');
+
+    // Block standard cloud metadata DNS names (SSRF protection)
+    if (
+      cleanHost === 'metadata.google.internal' ||
+      cleanHost === 'metadata' ||
+      cleanHost === 'instance.metadata.azure.com'
+    ) {
       return false;
+    }
+
+    // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
+    if (
+      ipToCheck === '100.100.100.200' ||
+      ipToCheck === '192.0.0.192' ||
+      ipToCheck === '168.63.129.16'
+    ) {
+      return false;
+    }
+
+    // Block private/untrusted link-local IPv4 ranges (169.254.0.0/16)
+    const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4Match) {
+      const [, a, b] = ipv4Match.map(Number);
+      if (a === 169 && b === 254) {
+        return false;
+      }
     }
 
     // Block IPv6 link-local addresses (fe80::/10) and AWS IPv6 metadata address
     if (
-      hostname.startsWith('fe80:') ||
-      hostname === '[fd00:ec2::254]' ||
-      hostname.startsWith('[fe80:')
+      /^fe[89ab][0-9a-f]:/i.test(cleanHost) ||
+      cleanHost === 'fd00:ec2::254'
     ) {
       return false;
     }
@@ -320,6 +363,23 @@ async function snapshot(opts: Opts): Promise<void> {
 
     const page = await browser.newPage();
     await page.setViewport({ width, height });
+
+    // Enable Request Interception to prevent SSRF and redirect bypasses (defense-in-depth)
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      const reqUrl = request.url();
+      // Allow data:, blob:, and about: protocols as they are local and do not make outbound network requests
+      if (reqUrl.startsWith('data:') || reqUrl.startsWith('blob:') || reqUrl.startsWith('about:')) {
+        request.continue();
+        return;
+      }
+      if (!isSafeUrl(reqUrl)) {
+        console.warn(`   [Blocked Unsafe Request] ${reqUrl}`);
+        request.abort();
+      } else {
+        request.continue();
+      }
+    });
 
     // Forward browser console logs to Node.js
     page.on('console', (msg) => {
@@ -484,16 +544,28 @@ async function snapshot(opts: Opts): Promise<void> {
           batchSize: number,
           fn: (item: T) => Promise<R>,
         ): Promise<(R | null)[]> => {
-          const results: (R | null)[] = [];
-          for (let i = 0; i < items.length; i += batchSize) {
-            const batch = items.slice(i, i + batchSize);
-            const batchResults = await Promise.allSettled(batch.map(fn));
-            results.push(
-              ...batchResults.map((r) =>
-                r.status === 'fulfilled' ? r.value : null,
-              ),
-            );
+          // Bolt optimization: Replace sequential chunk/batch processing with a worker pool/sliding-window queue.
+          // This eliminates head-of-line blocking when slow resource fetches block later fast assets.
+          const results = new Array<(R | null)>(items.length);
+          let index = 0;
+          const workers: Promise<void>[] = [];
+
+          const worker = async () => {
+            while (index < items.length) {
+              const curIndex = index++;
+              try {
+                results[curIndex] = await fn(items[curIndex]);
+              } catch {
+                results[curIndex] = null;
+              }
+            }
+          };
+
+          const count = Math.min(batchSize, items.length);
+          for (let w = 0; w < count; w++) {
+            workers.push(worker());
           }
+          await Promise.all(workers);
           return results;
         },
 
@@ -510,12 +582,13 @@ async function snapshot(opts: Opts): Promise<void> {
           const len = cssText.length;
 
           while (i < len) {
+            const char = cssText[i];
             // Look for 'url(' — case insensitive
             if (
               i + 3 < len &&
-              cssText[i].toLowerCase() === 'u' &&
-              cssText[i + 1].toLowerCase() === 'r' &&
-              cssText[i + 2].toLowerCase() === 'l' &&
+              (char === 'u' || char === 'U') &&
+              (cssText[i + 1] === 'r' || cssText[i + 1] === 'R') &&
+              (cssText[i + 2] === 'l' || cssText[i + 2] === 'L') &&
               cssText[i + 3] === '('
             ) {
               const urlStart = i;
@@ -542,19 +615,46 @@ async function snapshot(opts: Opts): Promise<void> {
               // Read the URL value
               let url = '';
               if (quote) {
+                const urlStartIdx = i;
+                let hasEscape = false;
                 // Quoted: read until matching unescaped quote
                 while (i < len && cssText[i] !== quote) {
                   if (cssText[i] === '\\' && i + 1 < len) {
-                    i++; // skip backslash
-                    url += cssText[i]; // include next char literally
+                    hasEscape = true;
+                    i += 2;
                   } else {
-                    url += cssText[i];
+                    i++;
                   }
-                  i++;
+                }
+                if (hasEscape) {
+                  // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
+                  // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
+                  const parts: string[] = [];
+                  let j = urlStartIdx;
+                  let lastIdx = urlStartIdx;
+                  while (j < i) {
+                    if (cssText[j] === '\\' && j + 1 < i) {
+                      if (j > lastIdx) {
+                        parts.push(cssText.substring(lastIdx, j));
+                      }
+                      parts.push(cssText[j + 1]);
+                      j += 2;
+                      lastIdx = j;
+                    } else {
+                      j++;
+                    }
+                  }
+                  if (j > lastIdx) {
+                    parts.push(cssText.substring(lastIdx, j));
+                  }
+                  url = parts.join('');
+                } else {
+                  url = cssText.substring(urlStartIdx, i);
                 }
                 if (i < len) i++; // skip closing quote
               } else {
                 // Unquoted: stop at ) or whitespace (per CSS spec)
+                const urlStartIdx = i;
                 while (
                   i < len &&
                   cssText[i] !== ')' &&
@@ -563,9 +663,9 @@ async function snapshot(opts: Opts): Promise<void> {
                   cssText[i] !== '\n' &&
                   cssText[i] !== '\r'
                 ) {
-                  url += cssText[i];
                   i++;
                 }
+                url = cssText.substring(urlStartIdx, i);
               }
 
               // Skip trailing whitespace before ')'
@@ -1077,13 +1177,13 @@ async function snapshot(opts: Opts): Promise<void> {
       const styledElements = Array.from(
         document.querySelectorAll('[style]'),
       ) as HTMLElement[];
+      // Bolt optimization: Define static RegExp pattern outside loop to avoid compiling on every styled element.
+      const urlPattern = /url\(['"]?(https?:\/\/[^'"\)\s]+)['"]?\)/g;
       for (const el of styledElements) {
         const style = el.getAttribute('style');
         if (!style || !style.includes('url(')) continue;
 
         // Use matchAll to handle multiple url() references
-        const urlPattern =
-          /url\(['"]?(https?:\/\/[^'"\)\s]+)['"]?\)/g;
         const matches = [...style.matchAll(urlPattern)];
         if (matches.length === 0) continue;
 

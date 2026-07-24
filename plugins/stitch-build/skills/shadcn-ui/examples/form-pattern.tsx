@@ -57,6 +57,9 @@ export function UserProfileForm() {
     },
   })
 
+  // Watch bio field for real-time character count
+  const bioValue = form.watch("bio") || ""
+
   // Handle form submission
   async function onSubmit(values: FormValues) {
     // Simulate API call to provide interactive loading UX
@@ -142,7 +145,19 @@ export function UserProfileForm() {
           name="bio"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Bio</FormLabel>
+              <div className="flex items-center justify-between">
+                <FormLabel>Bio</FormLabel>
+                <span
+                  className={`text-xs ${
+                    (field.value || "").length > 160
+                      ? "text-destructive font-medium"
+                      : "text-muted-foreground"
+                  }`}
+                  aria-live="polite"
+                >
+                  {(field.value || "").length}/160
+                </span>
+              </div>
               <FormControl>
                 <Textarea
                   placeholder="Tell us about yourself"
