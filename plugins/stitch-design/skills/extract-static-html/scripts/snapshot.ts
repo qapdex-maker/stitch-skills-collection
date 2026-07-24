@@ -627,17 +627,27 @@ async function snapshot(opts: Opts): Promise<void> {
                   }
                 }
                 if (hasEscape) {
-                  url = '';
+                  // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
+                  // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
+                  const parts: string[] = [];
                   let j = urlStartIdx;
+                  let lastIdx = urlStartIdx;
                   while (j < i) {
                     if (cssText[j] === '\\' && j + 1 < i) {
-                      j++;
-                      url += cssText[j];
+                      if (j > lastIdx) {
+                        parts.push(cssText.substring(lastIdx, j));
+                      }
+                      parts.push(cssText[j + 1]);
+                      j += 2;
+                      lastIdx = j;
                     } else {
-                      url += cssText[j];
+                      j++;
                     }
-                    j++;
                   }
+                  if (j > lastIdx) {
+                    parts.push(cssText.substring(lastIdx, j));
+                  }
+                  url = parts.join('');
                 } else {
                   url = cssText.substring(urlStartIdx, i);
                 }
@@ -1167,13 +1177,13 @@ async function snapshot(opts: Opts): Promise<void> {
       const styledElements = Array.from(
         document.querySelectorAll('[style]'),
       ) as HTMLElement[];
+      // Bolt optimization: Define static RegExp pattern outside loop to avoid compiling on every styled element.
+      const urlPattern = /url\(['"]?(https?:\/\/[^'"\)\s]+)['"]?\)/g;
       for (const el of styledElements) {
         const style = el.getAttribute('style');
         if (!style || !style.includes('url(')) continue;
 
         // Use matchAll to handle multiple url() references
-        const urlPattern =
-          /url\(['"]?(https?:\/\/[^'"\)\s]+)['"]?\)/g;
         const matches = [...style.matchAll(urlPattern)];
         if (matches.length === 0) continue;
 
