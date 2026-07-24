@@ -158,14 +158,26 @@ function validateOpts(opts: Opts): void {
     errors.push('No pages specified. Use --page src:dst:title');
   }
 
+  const resolvedOutdir = path.resolve(opts.outdir);
+  const safePrefix = resolvedOutdir.endsWith(path.sep) ? resolvedOutdir : resolvedOutdir + path.sep;
+
   for (const spec of opts.pages) {
     const parts = spec.split(':');
     if (parts.length !== 3) {
       errors.push(`Invalid page spec '${spec}'. Must be src:dst:title`);
     } else {
-      const [src] = parts;
+      const [src, dstName] = parts;
       if (!fs.existsSync(src)) {
         errors.push(`Source file not found: ${src}`);
+      }
+
+      // Security: prevent path traversal out of the designated output directory (CWE-22)
+      // Normalize backslashes to forward slashes for cross-platform safety
+      const normalizedDstName = dstName.replace(/\\/g, '/');
+      const dst = path.join(opts.outdir, normalizedDstName);
+      const resolvedDst = path.resolve(dst);
+      if (resolvedDst !== resolvedOutdir && !resolvedDst.startsWith(safePrefix)) {
+        errors.push(`Security Error: Destination path '${dstName}' escapes output directory '${opts.outdir}'`);
       }
     }
   }
@@ -237,6 +249,10 @@ const imgCache = new Map<string, string>();
 const activeFetches = new Map<string, Promise<string>>();
 const MAX_REDIRECTS = 5;
 
+// Bolt optimization: Extract static regex patterns used in embedImages to avoid dynamic RegExp compilation
+const SRC_URL_REGEX = /src="(https?:\/\/[^"]+)"/g;
+const POSTER_URL_REGEX = /poster="(https?:\/\/[^"]+)"/g;
+
 function isImageUrl(url: string): boolean {
   const skip = ['cdn.tailwindcss.com', 'fonts.googleapis.com', '.js', '.css'];
   return !skip.some((s) => url.includes(s));
@@ -284,7 +300,17 @@ export function isSafeUrl(parsed: URL): boolean {
   // Block standard cloud metadata DNS names (SSRF protection)
   if (
     cleanHost === 'metadata.google.internal' ||
-    cleanHost === 'metadata'
+    cleanHost === 'metadata' ||
+    cleanHost === 'instance.metadata.azure.com'
+  ) {
+    return false;
+  }
+
+  // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
+  if (
+    ipToCheck === '100.100.100.200' ||
+    ipToCheck === '192.0.0.192' ||
+    ipToCheck === '168.63.129.16'
   ) {
     return false;
   }
@@ -488,21 +514,48 @@ function extractCssUrls(text: string): CssUrlRef[] {
       // Read the URL value
       let url = '';
       if (quote) {
+        const urlStartIdx = i;
+        let hasEscape = false;
         while (i < len && text[i] !== quote) {
           if (text[i] === '\\' && i + 1 < len) {
-            i++;
-            url += text[i];
+            hasEscape = true;
+            i += 2;
           } else {
-            url += text[i];
+            i++;
           }
-          i++;
+        }
+        if (hasEscape) {
+          // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
+          // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
+          const parts: string[] = [];
+          let j = urlStartIdx;
+          let lastIdx = urlStartIdx;
+          while (j < i) {
+            if (text[j] === '\\' && j + 1 < i) {
+              if (j > lastIdx) {
+                parts.push(text.substring(lastIdx, j));
+              }
+              parts.push(text[j + 1]);
+              j += 2;
+              lastIdx = j;
+            } else {
+              j++;
+            }
+          }
+          if (j > lastIdx) {
+            parts.push(text.substring(lastIdx, j));
+          }
+          url = parts.join('');
+        } else {
+          url = text.substring(urlStartIdx, i);
         }
         if (i < len) i++; // closing quote
       } else {
+        const urlStartIdx = i;
         while (i < len && text[i] !== ')' && text[i] !== ' ' && text[i] !== '\t' && text[i] !== '\n') {
-          url += text[i];
           i++;
         }
+        url = text.substring(urlStartIdx, i);
       }
 
       // Skip trailing whitespace before ')'
@@ -545,7 +598,7 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
   const limit = createLimiter(concurrency);
 
   // --- Gather all image, CSS url, and video poster references from unmodified HTML ---
-  const srcMatches = [...html.matchAll(/src="(https?:\/\/[^"]+)"/g)];
+  const srcMatches = [...html.matchAll(SRC_URL_REGEX)];
   const srcImageMatches = srcMatches.filter((m) => isImageUrl(m[1]));
 
   const cssUrlRefs = extractCssUrls(html);
@@ -555,7 +608,7 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
       isImageUrl(ref.url),
   );
 
-  const posterMatches = [...html.matchAll(/poster="(https?:\/\/[^"]+)"/g)];
+  const posterMatches = [...html.matchAll(POSTER_URL_REGEX)];
 
   // Gather all unique URLs to prefetch in one flat set
   const urlsToPrefetch = new Set<string>();

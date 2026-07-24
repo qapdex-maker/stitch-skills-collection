@@ -57,6 +57,9 @@ export function UserProfileForm() {
     },
   })
 
+  // Watch bio field for real-time character count
+  const bioValue = form.watch("bio") || ""
+
   // Handle form submission
   async function onSubmit(values: FormValues) {
     // Simulate API call to provide interactive loading UX
@@ -160,8 +163,14 @@ export function UserProfileForm() {
                   {...field}
                 />
               </FormControl>
-              <FormDescription>
-                Optional. Maximum 160 characters.
+              <FormDescription className="flex justify-between">
+                <span>Optional. Maximum 160 characters.</span>
+                <span
+                  className={bioValue.length > 160 ? "text-destructive font-medium" : "text-muted-foreground"}
+                  aria-live="polite"
+                >
+                  {bioValue.length}/160
+                </span>
               </FormDescription>
               <FormMessage />
             </FormItem>

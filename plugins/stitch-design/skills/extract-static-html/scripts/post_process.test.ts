@@ -18,7 +18,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
 import fs from 'node:fs';
-import { isSafePath, resolveLocalFile } from './post_process.js';
+import { isSafePath, resolveLocalFile, extractCssUrls } from './post_process.js';
 import { isSafeUrl as isSafeUrlSnapshot } from './snapshot.js';
 
 // Local copy of isSafeUrl and ip6ToIpv4 from extract_inline_html.ts to avoid requiring @babel/parser dependency in unit tests
@@ -51,7 +51,17 @@ function isSafeUrlExtract(parsed: URL): boolean {
   // Block standard cloud metadata DNS names (SSRF protection)
   if (
     cleanHost === 'metadata.google.internal' ||
-    cleanHost === 'metadata'
+    cleanHost === 'metadata' ||
+    cleanHost === 'instance.metadata.azure.com'
+  ) {
+    return false;
+  }
+
+  // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
+  if (
+    ipToCheck === '100.100.100.200' ||
+    ipToCheck === '192.0.0.192' ||
+    ipToCheck === '168.63.129.16'
   ) {
     return false;
   }
@@ -330,6 +340,32 @@ test.describe('Path Traversal Security Tests', () => {
     const resolved = resolveLocalFile(path.join(altRoot, 'image.png'), absoluteRoot);
     assert.ok(resolved, `resolveLocalFile should resolve case-variant path: ${altRoot}\\image.png`);
   });
+
+  test('isSafeDstPath should block path traversal out of outdir', () => {
+    const isSafeDstPath = (dstName: string, outdir: string): boolean => {
+      const resolvedOutdir = path.resolve(outdir);
+      const safePrefix = resolvedOutdir.endsWith(path.sep) ? resolvedOutdir : resolvedOutdir + path.sep;
+      const normalizedDstName = dstName.replace(/\\/g, '/');
+      const dst = path.join(outdir, normalizedDstName);
+      const resolvedDst = path.resolve(dst);
+      return resolvedDst === resolvedOutdir || resolvedDst.startsWith(safePrefix);
+    };
+
+    const outdir = './stitch-out';
+
+    // Safe destination names
+    assert.strictEqual(isSafeDstPath('home.html', outdir), true);
+    assert.strictEqual(isSafeDstPath('sub/page.html', outdir), true);
+    assert.strictEqual(isSafeDstPath('sub/../home.html', outdir), true);
+
+    // Unsafe/traversing destination names
+    assert.strictEqual(isSafeDstPath('../evil.html', outdir), false);
+    assert.strictEqual(isSafeDstPath('../../etc/passwd', outdir), false);
+
+    // Windows/Cross-platform traversal payloads
+    assert.strictEqual(isSafeDstPath('..\\evil.html', outdir), false);
+    assert.strictEqual(isSafeDstPath('../stitch-out-sibling/evil.html', outdir), false);
+  });
 });
 
 test.describe('Snapshot URL Validation Security Tests', () => {
@@ -388,10 +424,155 @@ test.describe('Snapshot URL Validation Security Tests', () => {
       'http://0251.0376.0251.0376/',
       'http://2852039166/',
       'http://[::ffff:a9fe:a9fe]:8080/path',
+      'http://100.100.100.200/',
+      'http://instance.metadata.azure.com/',
+      'http://192.0.0.192/',
+      'http://168.63.129.16/',
     ];
     for (const url of metadataUrls) {
       assert.strictEqual(isSafeUrlSnapshot(url), false, `Expected link-local/metadata URL to be blocked by snapshot: ${url}`);
     }
+  });
+});
+
+test.describe('extractCssUrls parser tests', () => {
+  test('should parse standard quoted and unquoted urls correctly', () => {
+    const css = `
+      body {
+        background: url('foo.png');
+        background-image: url("bar.jpg");
+        list-style: url(baz.gif);
+      }
+    `;
+    const urls = extractCssUrls(css);
+    assert.strictEqual(urls.length, 3);
+    assert.strictEqual(urls[0].url, 'foo.png');
+    assert.strictEqual(urls[1].url, 'bar.jpg');
+    assert.strictEqual(urls[2].url, 'baz.gif');
+  });
+
+  test('should parse urls with escapes and whitespace correctly', () => {
+    const css = `
+      body {
+        background: url(   "escaped\\\\quote.png"   );
+      }
+    `;
+    const urls = extractCssUrls(css);
+    assert.strictEqual(urls.length, 1);
+    assert.strictEqual(urls[0].url, 'escaped\\quote.png');
+  });
+
+  test('should ignore malformed urls', () => {
+    const css = `
+      body {
+        background: url(unclosed;
+        background: url('unclosed-quote);
+      }
+    `;
+    const urls = extractCssUrls(css);
+    assert.strictEqual(urls.length, 0);
+  });
+});
+
+test.describe('processInBatches sliding window optimization tests', () => {
+  const processInBatches = async <T, R>(
+    items: T[],
+    batchSize: number,
+    fn: (item: T) => Promise<R>,
+  ): Promise<(R | null)[]> => {
+    const results = new Array<(R | null)>(items.length);
+    let index = 0;
+    const workers: Promise<void>[] = [];
+
+    const worker = async () => {
+      while (index < items.length) {
+        const curIndex = index++;
+        try {
+          results[curIndex] = await fn(items[curIndex]);
+        } catch {
+          results[curIndex] = null;
+        }
+      }
+    };
+
+    const count = Math.min(batchSize, items.length);
+    for (let w = 0; w < count; w++) {
+      workers.push(worker());
+    }
+    await Promise.all(workers);
+    return results;
+  };
+
+  test('should process all items in correct order', async () => {
+    const items = [1, 2, 3, 4, 5];
+    const results = await processInBatches(items, 2, async (x) => x * 2);
+    assert.deepStrictEqual(results, [2, 4, 6, 8, 10]);
+  });
+
+  test('should handle empty input array correctly', async () => {
+    const results = await processInBatches([], 3, async (x) => x);
+    assert.deepStrictEqual(results, []);
+  });
+
+  test('should handle input size smaller than batch size', async () => {
+    const items = [10, 20];
+    const results = await processInBatches(items, 5, async (x) => x + 1);
+    assert.deepStrictEqual(results, [11, 21]);
+  });
+
+  test('should catch errors and handle rejected promises gracefully', async () => {
+    const items = ['ok', 'fail', 'ok2'];
+    const results = await processInBatches(items, 2, async (x) => {
+      if (x === 'fail') throw new Error('forced failure');
+      return x.toUpperCase();
+    });
+    assert.deepStrictEqual(results, ['OK', null, 'OK2']);
+  });
+
+  test('should prevent head-of-line blocking (sliding window / worker pool optimization)', async () => {
+    const items = ['slow', 'fast1', 'fast2'];
+    const startTime = Date.now();
+
+    const results = await processInBatches(items, 2, async (x) => {
+      if (x === 'slow') {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return 'slow_done';
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return x + '_done';
+      }
+    });
+
+    const duration = Date.now() - startTime;
+    assert.deepStrictEqual(results, ['slow_done', 'fast1_done', 'fast2_done']);
+    assert.ok(duration < 90, `Expected duration to be less than 90ms (actual: ${duration}ms) due to sliding window concurrency`);
+  });
+
+  test('should prevent head-of-line blocking deterministically without timing sensitivity', async () => {
+    const items = ['slow', 'fast1', 'fast2'];
+    const events: string[] = [];
+
+    await processInBatches(items, 2, async (x) => {
+      events.push(`start:${x}`);
+      if (x === 'slow') {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      events.push(`end:${x}`);
+      return x;
+    });
+
+    const expected = [
+      'start:slow',
+      'start:fast1',
+      'end:fast1',
+      'start:fast2',
+      'end:fast2',
+      'end:slow'
+    ];
+
+    assert.deepStrictEqual(events, expected, 'Worker pool did not execute tasks in a non-blocking sliding window sequence');
   });
 });
 
@@ -462,6 +643,9 @@ test.describe('Extract Inline HTML URL Validation Security Tests', () => {
       'http://224.0.0.1/',
       'http://240.0.0.1/',
       'http://255.255.255.255/',
+      'http://instance.metadata.azure.com/',
+      'http://192.0.0.192/',
+      'http://168.63.129.16/',
     ];
     for (const url of blockedUrls) {
       assert.strictEqual(checkUrl(url), false, `Expected loopback/private/link-local/metadata/multicast URL to be blocked: ${url}`);

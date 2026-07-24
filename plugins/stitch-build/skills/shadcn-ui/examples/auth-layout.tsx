@@ -69,6 +69,7 @@ export function AuthLayout() {
                     id="email"
                     type="email"
                     placeholder="m@example.com"
+                    autoComplete="email"
                     required
                     disabled={isLoading}
                   />
@@ -85,6 +86,7 @@ export function AuthLayout() {
                       id="password"
                       type={showLoginPassword ? "text" : "password"}
                       className="pr-10"
+                      autoComplete="current-password"
                       required
                       disabled={isLoading}
                     />
@@ -150,6 +152,7 @@ export function AuthLayout() {
                   <Input
                     id="name"
                     placeholder="John Doe"
+                    autoComplete="name"
                     required
                     disabled={isLoading}
                   />
@@ -165,6 +168,7 @@ export function AuthLayout() {
                     id="register-email"
                     type="email"
                     placeholder="m@example.com"
+                    autoComplete="email"
                     required
                     disabled={isLoading}
                   />
@@ -181,6 +185,7 @@ export function AuthLayout() {
                       id="register-password"
                       type={showRegisterPassword ? "text" : "password"}
                       className="pr-10"
+                      autoComplete="new-password"
                       required
                       disabled={isLoading}
                     />
@@ -216,6 +221,7 @@ export function AuthLayout() {
                       id="confirm-password"
                       type={showConfirmPassword ? "text" : "password"}
                       className="pr-10"
+                      autoComplete="new-password"
                       required
                       disabled={isLoading}
                     />
