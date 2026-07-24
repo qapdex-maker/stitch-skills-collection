@@ -72,6 +72,8 @@ export function UserProfileForm() {
     })
   }
 
+  const bioValue = form.watch("bio") || ""
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -165,10 +167,7 @@ export function UserProfileForm() {
               </FormControl>
               <FormDescription className="flex justify-between">
                 <span>Optional. Maximum 160 characters.</span>
-                <span
-                  className={bioValue.length > 160 ? "text-destructive font-medium" : "text-muted-foreground"}
-                  aria-live="polite"
-                >
+                <span className={bioValue.length > 160 ? "text-destructive font-medium" : "text-muted-foreground"}>
                   {bioValue.length}/160
                 </span>
               </FormDescription>
