@@ -158,14 +158,26 @@ function validateOpts(opts: Opts): void {
     errors.push('No pages specified. Use --page src:dst:title');
   }
 
+  const resolvedOutdir = path.resolve(opts.outdir);
+  const safePrefix = resolvedOutdir.endsWith(path.sep) ? resolvedOutdir : resolvedOutdir + path.sep;
+
   for (const spec of opts.pages) {
     const parts = spec.split(':');
     if (parts.length !== 3) {
       errors.push(`Invalid page spec '${spec}'. Must be src:dst:title`);
     } else {
-      const [src] = parts;
+      const [src, dstName] = parts;
       if (!fs.existsSync(src)) {
         errors.push(`Source file not found: ${src}`);
+      }
+
+      // Security: prevent path traversal out of the designated output directory (CWE-22)
+      // Normalize backslashes to forward slashes for cross-platform safety
+      const normalizedDstName = dstName.replace(/\\/g, '/');
+      const dst = path.join(opts.outdir, normalizedDstName);
+      const resolvedDst = path.resolve(dst);
+      if (resolvedDst !== resolvedOutdir && !resolvedDst.startsWith(safePrefix)) {
+        errors.push(`Security Error: Destination path '${dstName}' escapes output directory '${opts.outdir}'`);
       }
     }
   }

@@ -340,6 +340,32 @@ test.describe('Path Traversal Security Tests', () => {
     const resolved = resolveLocalFile(path.join(altRoot, 'image.png'), absoluteRoot);
     assert.ok(resolved, `resolveLocalFile should resolve case-variant path: ${altRoot}\\image.png`);
   });
+
+  test('isSafeDstPath should block path traversal out of outdir', () => {
+    const isSafeDstPath = (dstName: string, outdir: string): boolean => {
+      const resolvedOutdir = path.resolve(outdir);
+      const safePrefix = resolvedOutdir.endsWith(path.sep) ? resolvedOutdir : resolvedOutdir + path.sep;
+      const normalizedDstName = dstName.replace(/\\/g, '/');
+      const dst = path.join(outdir, normalizedDstName);
+      const resolvedDst = path.resolve(dst);
+      return resolvedDst === resolvedOutdir || resolvedDst.startsWith(safePrefix);
+    };
+
+    const outdir = './stitch-out';
+
+    // Safe destination names
+    assert.strictEqual(isSafeDstPath('home.html', outdir), true);
+    assert.strictEqual(isSafeDstPath('sub/page.html', outdir), true);
+    assert.strictEqual(isSafeDstPath('sub/../home.html', outdir), true);
+
+    // Unsafe/traversing destination names
+    assert.strictEqual(isSafeDstPath('../evil.html', outdir), false);
+    assert.strictEqual(isSafeDstPath('../../etc/passwd', outdir), false);
+
+    // Windows/Cross-platform traversal payloads
+    assert.strictEqual(isSafeDstPath('..\\evil.html', outdir), false);
+    assert.strictEqual(isSafeDstPath('../stitch-out-sibling/evil.html', outdir), false);
+  });
 });
 
 test.describe('Snapshot URL Validation Security Tests', () => {
