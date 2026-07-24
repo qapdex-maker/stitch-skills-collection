@@ -207,17 +207,27 @@ export function extractCssUrls(text: string): CssUrlRef[] {
           }
         }
         if (hasEscape) {
-          url = '';
+          // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
+          // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
+          const parts: string[] = [];
           let j = urlStartIdx;
+          let lastIdx = urlStartIdx;
           while (j < i) {
             if (text[j] === '\\' && j + 1 < i) {
-              j++;
-              url += text[j];
+              if (j > lastIdx) {
+                parts.push(text.substring(lastIdx, j));
+              }
+              parts.push(text[j + 1]);
+              j += 2;
+              lastIdx = j;
             } else {
-              url += text[j];
+              j++;
             }
-            j++;
           }
+          if (j > lastIdx) {
+            parts.push(text.substring(lastIdx, j));
+          }
+          url = parts.join('');
         } else {
           url = text.substring(urlStartIdx, i);
         }

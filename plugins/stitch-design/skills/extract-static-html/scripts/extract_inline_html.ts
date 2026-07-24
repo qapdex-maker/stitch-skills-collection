@@ -237,6 +237,10 @@ const imgCache = new Map<string, string>();
 const activeFetches = new Map<string, Promise<string>>();
 const MAX_REDIRECTS = 5;
 
+// Bolt optimization: Extract static regex patterns used in embedImages to avoid dynamic RegExp compilation
+const SRC_URL_REGEX = /src="(https?:\/\/[^"]+)"/g;
+const POSTER_URL_REGEX = /poster="(https?:\/\/[^"]+)"/g;
+
 function isImageUrl(url: string): boolean {
   const skip = ['cdn.tailwindcss.com', 'fonts.googleapis.com', '.js', '.css'];
   return !skip.some((s) => url.includes(s));
@@ -509,17 +513,27 @@ function extractCssUrls(text: string): CssUrlRef[] {
           }
         }
         if (hasEscape) {
-          url = '';
+          // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
+          // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
+          const parts: string[] = [];
           let j = urlStartIdx;
+          let lastIdx = urlStartIdx;
           while (j < i) {
             if (text[j] === '\\' && j + 1 < i) {
-              j++;
-              url += text[j];
+              if (j > lastIdx) {
+                parts.push(text.substring(lastIdx, j));
+              }
+              parts.push(text[j + 1]);
+              j += 2;
+              lastIdx = j;
             } else {
-              url += text[j];
+              j++;
             }
-            j++;
           }
+          if (j > lastIdx) {
+            parts.push(text.substring(lastIdx, j));
+          }
+          url = parts.join('');
         } else {
           url = text.substring(urlStartIdx, i);
         }
@@ -572,7 +586,7 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
   const limit = createLimiter(concurrency);
 
   // --- Gather all image, CSS url, and video poster references from unmodified HTML ---
-  const srcMatches = [...html.matchAll(/src="(https?:\/\/[^"]+)"/g)];
+  const srcMatches = [...html.matchAll(SRC_URL_REGEX)];
   const srcImageMatches = srcMatches.filter((m) => isImageUrl(m[1]));
 
   const cssUrlRefs = extractCssUrls(html);
@@ -582,7 +596,7 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
       isImageUrl(ref.url),
   );
 
-  const posterMatches = [...html.matchAll(/poster="(https?:\/\/[^"]+)"/g)];
+  const posterMatches = [...html.matchAll(POSTER_URL_REGEX)];
 
   // Gather all unique URLs to prefetch in one flat set
   const urlsToPrefetch = new Set<string>();

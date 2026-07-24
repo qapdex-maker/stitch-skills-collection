@@ -19,3 +19,7 @@
 ## 2026-03-06 - [Static Regex Compilation and Caching Canonical Path Lookups]
 **Learning:** Compiling dynamic Regular Expressions inside loops and running match operations that allocate arrays introduces GC pressure and performance bottlenecks. Extracting regex patterns (such as attribute matching) into module-level static constants and using lightweight `RegExp.prototype.test()` instead of `match()` eliminates compile overhead. Additionally, caching both the input query path and resolved canonical output path in a realpath utility map guarantees subsequent duplicate lookups are resolved in O(1) time.
 **Action:** Declare all loops' regexes at module scope as static constants and cache both the query and canonical return keys to minimize CPU cycles and memory churn.
+
+## 2026-03-07 - [Substring Slices and Array Joining for Escaped URL Parsing & RegExp Hoisting]
+**Learning:** Character-by-character string concatenation inside hot string parsing loops causes substantial memory allocations and Garbage Collection (GC) overhead in JS runtimes. Replacing concatenation with substring slicing and array joins significantly minimizes memory churn. Furthermore, compiling RegExp literals inside styled element loops creates unnecessary dynamic compilation overhead, which is entirely bypassed by hoisting RegExp instances outside loop and invocation scopes.
+**Action:** Use array pushes and `.join('')` combined with substring slicing in hot loops rather than simple `+=` string concatenation, and always hoist RegExp patterns outside hot loops.
