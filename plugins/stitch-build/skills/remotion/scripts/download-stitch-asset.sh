@@ -14,6 +14,22 @@ fi
 DOWNLOAD_URL="$1"
 OUTPUT_PATH="$2"
 
+if [ -z "$DOWNLOAD_URL" ] || [ -z "$OUTPUT_PATH" ]; then
+  echo "Usage: $0 <download_url> <output_path>"
+  exit 1
+fi
+
+# Security: prevent option injection (CWE-88) and enforce protocol restriction at shell boundary
+if [[ ! "$DOWNLOAD_URL" =~ ^https?:// ]]; then
+  echo "Error: Download URL must start with http:// or https://"
+  exit 1
+fi
+
+if [[ "$OUTPUT_PATH" == -* ]]; then
+  echo "Error: Output path cannot start with a hyphen"
+  exit 1
+fi
+
 # Create directory if it doesn't exist
 OUTPUT_DIR=$(dirname "$OUTPUT_PATH")
 mkdir -p "$OUTPUT_DIR"
@@ -23,7 +39,8 @@ echo "Saving to: $OUTPUT_PATH"
 
 # Use curl with follow redirects and authentication handling
 # Security: restrict protocols to HTTP/HTTPS to prevent protocol-based attacks (e.g. LFI/SSRF)
-curl -L --proto =http,https -o "$OUTPUT_PATH" "$DOWNLOAD_URL"
+# Use -- to separate options from arguments
+curl -L --proto =http,https -o "$OUTPUT_PATH" -- "$DOWNLOAD_URL"
 
 if [ $? -eq 0 ]; then
   echo "✓ Successfully downloaded to $OUTPUT_PATH"
