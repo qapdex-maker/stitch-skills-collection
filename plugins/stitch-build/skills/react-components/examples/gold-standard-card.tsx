@@ -37,7 +37,10 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
         />
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm sm:text-base">
-          <a href="#" className="font-semibold text-primary hover:underline truncate">
+          <a
+            href="#"
+            className="font-semibold text-primary hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm truncate"
+          >
             {username}
           </a>
 
@@ -48,7 +51,10 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
 
           <span className="text-white/60">in</span>
 
-          <a href="#" className="text-primary hover:underline truncate">
+          <a
+            href="#"
+            className="text-primary hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm truncate"
+          >
             {repoName}
           </a>
         </div>
