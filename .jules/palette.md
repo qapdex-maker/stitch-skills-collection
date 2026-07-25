@@ -25,3 +25,7 @@
 ## 2026-11-23 - Interactive Inline Link Focus Indicators
 **Learning:** In dark-themed dashboard components, interactive inline links (such as usernames and repository names) frequently lack visual focus indicators. While `hover:underline` is commonly used for mouse users, keyboard-only navigators are left without clear visual feedback. Coupling `focus-visible:ring-1` with outline prevention and visible underlines on focus ensures WCAG 2.1 compliance without compromising the dark, high-fidelity design aesthetics.
 **Action:** Always provide custom `focus-visible:underline`, focus-visible rings, and custom roundings on all inline interactive links to ensure high keyboard-navigation visibility.
+
+## 2026-11-24 - Consolidating Form Live Character Counters
+**Learning:** Rendering duplicate character counters on a single text field (e.g. at the top of the field and inside the description footer) introduces visual redundancy and confusing duplicate screen reader updates. Consolidating into a single, beautifully positioned character counter with `aria-live="polite"` at the top-right of the text area improves both the visual aesthetic and accessible screen-reader experience.
+**Action:** Always ensure exactly one screen-reader accessible `aria-live="polite"` character counter is declared per text field, and avoid repeating the counter state in descriptions.

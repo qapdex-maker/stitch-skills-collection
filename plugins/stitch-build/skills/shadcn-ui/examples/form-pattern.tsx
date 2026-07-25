@@ -1,32 +1,32 @@
 // Example: Form Pattern with shadcn/ui components
 // Demonstrates: Form building, validation, and composition
 
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
-    Form,
-    FormControl,
-    FormDescription,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { toast } from "@/components/ui/use-toast"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import * as z from "zod"
-import { Loader2 } from "lucide-react"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/use-toast";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { Loader2 } from "lucide-react";
 
 // Define form schema with zod
 const formSchema = z.object({
@@ -39,12 +39,15 @@ const formSchema = z.object({
   role: z.enum(["admin", "user", "viewer"], {
     required_error: "Please select a role.",
   }),
-  bio: z.string().max(160, {
-    message: "Bio must not be longer than 160 characters.",
-  }).optional(),
-})
+  bio: z
+    .string()
+    .max(160, {
+      message: "Bio must not be longer than 160 characters.",
+    })
+    .optional(),
+});
 
-type FormValues = z.infer<typeof formSchema>
+type FormValues = z.infer<typeof formSchema>;
 
 export function UserProfileForm() {
   // Initialize form with react-hook-form and zod validation
@@ -55,24 +58,22 @@ export function UserProfileForm() {
       email: "",
       bio: "",
     },
-  })
+  });
 
   // Watch bio field for real-time character count
-  const bioValue = form.watch("bio") || ""
+  const bioValue = form.watch("bio") || "";
 
   // Handle form submission
   async function onSubmit(values: FormValues) {
     // Simulate API call to provide interactive loading UX
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    console.log(values)
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    console.log(values);
+
     toast({
       title: "Profile updated",
       description: "Your profile has been successfully updated.",
-    })
+    });
   }
-
-  const bioValue = form.watch("bio") || ""
 
   return (
     <Form {...form}>
@@ -83,7 +84,10 @@ export function UserProfileForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Username <span className="text-destructive" aria-hidden="true">*</span>
+                Username{" "}
+                <span className="text-destructive" aria-hidden="true">
+                  *
+                </span>
               </FormLabel>
               <FormControl>
                 <Input placeholder="johndoe" {...field} />
@@ -102,7 +106,10 @@ export function UserProfileForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Email <span className="text-destructive" aria-hidden="true">*</span>
+                Email{" "}
+                <span className="text-destructive" aria-hidden="true">
+                  *
+                </span>
               </FormLabel>
               <FormControl>
                 <Input type="email" placeholder="john@example.com" {...field} />
@@ -118,7 +125,10 @@ export function UserProfileForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Role <span className="text-destructive" aria-hidden="true">*</span>
+                Role{" "}
+                <span className="text-destructive" aria-hidden="true">
+                  *
+                </span>
               </FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
@@ -149,13 +159,13 @@ export function UserProfileForm() {
                 <FormLabel>Bio</FormLabel>
                 <span
                   className={`text-xs ${
-                    (field.value || "").length > 160
+                    bioValue.length > 160
                       ? "text-destructive font-medium"
                       : "text-muted-foreground"
                   }`}
                   aria-live="polite"
                 >
-                  {(field.value || "").length}/160
+                  {bioValue.length}/160
                 </span>
               </div>
               <FormControl>
@@ -165,11 +175,8 @@ export function UserProfileForm() {
                   {...field}
                 />
               </FormControl>
-              <FormDescription className="flex justify-between">
-                <span>Optional. Maximum 160 characters.</span>
-                <span className={bioValue.length > 160 ? "text-destructive font-medium" : "text-muted-foreground"}>
-                  {bioValue.length}/160
-                </span>
+              <FormDescription>
+                Optional. Maximum 160 characters.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -184,23 +191,23 @@ export function UserProfileForm() {
         </Button>
       </form>
     </Form>
-  )
+  );
 }
 
 /**
  * Key Patterns Demonstrated:
- * 
+ *
  * 1. Form Composition: Using shadcn/ui's Form components with react-hook-form
  * 2. Validation: Zod schema for type-safe validation
  * 3. Error Handling: Automatic error messages via FormMessage
  * 4. Accessibility: All fields properly labeled with descriptions
  * 5. Type Safety: TypeScript types inferred from Zod schema
- * 
+ *
  * Required Dependencies:
  * - react-hook-form
  * - @hookform/resolvers
  * - zod
- * 
+ *
  * Installation:
  * npx shadcn@latest add form
  * npx shadcn@latest add input
