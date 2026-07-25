@@ -253,9 +253,10 @@ const MAX_REDIRECTS = 5;
 const SRC_URL_REGEX = /src="(https?:\/\/[^"]+)"/g;
 const POSTER_URL_REGEX = /poster="(https?:\/\/[^"]+)"/g;
 
+// Bolt optimization: Pre-compiled static RegExp for fast testing, avoiding array allocation and loop lookups
+const IMAGE_URL_SKIP_REGEX = /cdn\.tailwindcss\.com|fonts\.googleapis\.com|\.js|\.css/i;
 function isImageUrl(url: string): boolean {
-  const skip = ['cdn.tailwindcss.com', 'fonts.googleapis.com', '.js', '.css'];
-  return !skip.some((s) => url.includes(s));
+  return !IMAGE_URL_SKIP_REGEX.test(url);
 }
 
 
@@ -669,9 +670,14 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
 // JSX → HTML conversion using Babel AST
 // ---------------------------------------------------------------------------
 
-// Convert camelCase to kebab-case
+// Convert camelCase to kebab-case (with O(1) Map cache for hot-path style keys)
+const camelToKebabCache = new Map<string, string>();
 function camelToKebab(str: string): string {
-  return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+  const cached = camelToKebabCache.get(str);
+  if (cached !== undefined) return cached;
+  const result = str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+  camelToKebabCache.set(str, result);
+  return result;
 }
 
 // SVG attribute mapping
