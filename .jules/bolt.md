@@ -27,3 +27,7 @@
 ## 2026-03-08 - [Caching camelToKebab AST key conversions and pre-compiling isImageUrl check regex]
 **Learning:** During JSX-to-HTML AST rendering, styled element attributes (like flexDirection, alignItems, margin) are extremely recurrent across thousands of elements. Caching string conversions in a Map-based `camelToKebab` cache completely avoids RegExp replacement and allocation overhead, yielding a 50x speedup. Furthermore, using a static pre-compiled `RegExp.prototype.test()` instead of arrays with `.some()` and `.includes()` inside hot loops avoids array allocations and speeds up file check iterations by 38%.
 **Action:** Always pre-compile skip/check patterns as module-level static RegExp instances, and cache repeated string mapping functions on hot-path loops using O(1) Map lookups.
+
+## 2026-07-26 - [Hoisting resolution & file caches for multi-file CLI utilities with safe lifecycle management]
+**Learning:** In CLI or utility scripts designed to process multiple files (e.g. `post_process.ts`), instantiating file resolution and reading caches locally inside iteration functions causes duplicate assets to be processed repeatedly on each file. Hoisting these caches to the module level enables powerful cross-file performance gains. To prevent memory leaks or stale entries in persistent runtimes, always clear these caches inside a `finally` block of the script's entry point (`main()`).
+**Action:** Hoist caches to module scope to benefit multiple files, and safely manage cache lifecycles by clearing them upon main execution completion.

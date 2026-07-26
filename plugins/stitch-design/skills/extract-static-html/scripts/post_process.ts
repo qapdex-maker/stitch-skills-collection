@@ -386,6 +386,12 @@ function isLocalPath(url: string): boolean {
 // ---------------------------------------------------------------------------
 // Inline images in HTML
 // ---------------------------------------------------------------------------
+// Performance caches: avoid repetitive and expensive filesystem/stat queries for duplicate assets.
+// Hoisted to the module level to ensure duplicate resources across different HTML files processed
+// in a single execution are resolved, checked, read, and base64-encoded exactly once.
+const globalResolvedCache = new Map<string, string | null>();
+const globalFileCache = new Map<string, ReturnType<typeof readFileAtomic>>();
+
 function inlineImages(
   html: string,
   baseDir: string,
@@ -399,28 +405,23 @@ function inlineImages(
     skippedNotFound: [],
   };
 
-  // Performance caches: avoid repetitive and expensive filesystem/stat queries for duplicate assets.
-  // This prevents redundant disk IO and path resolution calls on larger HTML files with multiple references to the same asset.
-  const resolvedCache = new Map<string, string | null>();
-  const fileCache = new Map<string, ReturnType<typeof readFileAtomic>>();
-
   const getCachedResolvedFile = (localPath: string): string | null => {
     const cacheKey = `${localPath}::${baseDir}`;
-    if (resolvedCache.has(cacheKey)) {
-      return resolvedCache.get(cacheKey)!;
+    if (globalResolvedCache.has(cacheKey)) {
+      return globalResolvedCache.get(cacheKey)!;
     }
     const resolved = resolveLocalFile(localPath, baseDir);
-    resolvedCache.set(cacheKey, resolved);
+    globalResolvedCache.set(cacheKey, resolved);
     return resolved;
   };
 
   const getCachedFileContent = (resolvedPath: string): ReturnType<typeof readFileAtomic> => {
     const cacheKey = `${resolvedPath}::${maxSize}`;
-    if (fileCache.has(cacheKey)) {
-      return fileCache.get(cacheKey)!;
+    if (globalFileCache.has(cacheKey)) {
+      return globalFileCache.get(cacheKey)!;
     }
     const content = readFileAtomic(resolvedPath, maxSize);
-    fileCache.set(cacheKey, content);
+    globalFileCache.set(cacheKey, content);
     return content;
   };
 
@@ -548,76 +549,82 @@ function main(): void {
     console.log('🔍 DRY RUN — no files will be modified\n');
   }
 
-  for (const file of opts.files) {
-    // Open file once with r+ to eliminate TOCTOU race between read and write.
-    // A single fd is used for both operations, so the file cannot be swapped
-    // between the read and write phases.
-    let fd: number;
-    try {
-      fd = fs.openSync(file, opts.dryRun ? 'r' : 'r+');
-    } catch {
-      console.warn(`⚠️  File not found, skipping: ${file}`);
-      continue;
-    }
-
-    let processed: string = '';
-    let stats: InlineStats = { srcInlined: 0, urlInlined: 0, skippedTooLarge: [], skippedNotFound: [] };
-    try {
-      const html = fs.readFileSync(fd, 'utf-8');
-
-      const result = inlineImages(html, opts.baseDir, opts.maxSize, opts.dryRun);
-      processed = result.html;
-      stats = result.stats;
-
-      if (!opts.dryRun) {
-        // Truncate and rewrite using the same fd — no second path-based open
-        fs.ftruncateSync(fd);
-        fs.writeSync(fd, processed, 0, 'utf-8');
+  try {
+    for (const file of opts.files) {
+      // Open file once with r+ to eliminate TOCTOU race between read and write.
+      // A single fd is used for both operations, so the file cannot be swapped
+      // between the read and write phases.
+      let fd: number;
+      try {
+        fd = fs.openSync(file, opts.dryRun ? 'r' : 'r+');
+      } catch {
+        console.warn(`⚠️  File not found, skipping: ${file}`);
+        continue;
       }
-    } finally {
-      fs.closeSync(fd);
-    }
 
-    const totalInlined = stats.srcInlined + stats.urlInlined;
-    const label = opts.dryRun ? 'would inline' : 'inlined';
-    console.log(
-      `${file}: ${label} ${totalInlined} resources ` +
-        `(${stats.srcInlined} src, ${stats.urlInlined} url()) ` +
-        `— ${processed.length.toLocaleString()} bytes`,
-    );
+      let processed: string = '';
+      let stats: InlineStats = { srcInlined: 0, urlInlined: 0, skippedTooLarge: [], skippedNotFound: [] };
+      try {
+        const html = fs.readFileSync(fd, 'utf-8');
 
-    if (stats.skippedTooLarge.length > 0) {
-      for (const s of stats.skippedTooLarge) {
-        console.log(
-          `   ⚠️  Skipped (too large: ${(s.size / 1024).toFixed(1)} KB): ${s.path}`,
-        );
+        const result = inlineImages(html, opts.baseDir, opts.maxSize, opts.dryRun);
+        processed = result.html;
+        stats = result.stats;
+
+        if (!opts.dryRun) {
+          // Truncate and rewrite using the same fd — no second path-based open
+          fs.ftruncateSync(fd);
+          fs.writeSync(fd, processed, 0, 'utf-8');
+        }
+      } finally {
+        fs.closeSync(fd);
       }
+
+      const totalInlined = stats.srcInlined + stats.urlInlined;
+      const label = opts.dryRun ? 'would inline' : 'inlined';
+      console.log(
+        `${file}: ${label} ${totalInlined} resources ` +
+          `(${stats.srcInlined} src, ${stats.urlInlined} url()) ` +
+          `— ${processed.length.toLocaleString()} bytes`,
+      );
+
+      if (stats.skippedTooLarge.length > 0) {
+        for (const s of stats.skippedTooLarge) {
+          console.log(
+            `   ⚠️  Skipped (too large: ${(s.size / 1024).toFixed(1)} KB): ${s.path}`,
+          );
+        }
+      }
+
+      allStats.files.push({
+        file,
+        srcInlined: stats.srcInlined,
+        urlInlined: stats.urlInlined,
+        skippedNotFound: stats.skippedNotFound.length,
+        skippedTooLarge: stats.skippedTooLarge.length,
+        sizeBytes: processed.length,
+      });
+      allStats.totalSrcInlined += stats.srcInlined;
+      allStats.totalUrlInlined += stats.urlInlined;
+      allStats.totalSkippedNotFound += stats.skippedNotFound.length;
+      allStats.totalSkippedTooLarge += stats.skippedTooLarge.length;
     }
 
-    allStats.files.push({
-      file,
-      srcInlined: stats.srcInlined,
-      urlInlined: stats.urlInlined,
-      skippedNotFound: stats.skippedNotFound.length,
-      skippedTooLarge: stats.skippedTooLarge.length,
-      sizeBytes: processed.length,
-    });
-    allStats.totalSrcInlined += stats.srcInlined;
-    allStats.totalUrlInlined += stats.urlInlined;
-    allStats.totalSkippedNotFound += stats.skippedNotFound.length;
-    allStats.totalSkippedTooLarge += stats.skippedTooLarge.length;
-  }
+    const totalInlined = allStats.totalSrcInlined + allStats.totalUrlInlined;
+    console.log(`\n✅ Total: ${totalInlined} resources inlined across ${allStats.files.length} file(s)`);
 
-  const totalInlined = allStats.totalSrcInlined + allStats.totalUrlInlined;
-  console.log(`\n✅ Total: ${totalInlined} resources inlined across ${allStats.files.length} file(s)`);
+    if (allStats.totalSkippedTooLarge > 0) {
+      console.log(`   ⚠️  ${allStats.totalSkippedTooLarge} skipped (exceeded ${(opts.maxSize / 1024 / 1024).toFixed(1)} MB limit)`);
+    }
 
-  if (allStats.totalSkippedTooLarge > 0) {
-    console.log(`   ⚠️  ${allStats.totalSkippedTooLarge} skipped (exceeded ${(opts.maxSize / 1024 / 1024).toFixed(1)} MB limit)`);
-  }
-
-  if (opts.json) {
-    console.log('\n--- JSON Stats ---');
-    console.log(JSON.stringify(allStats, null, 2));
+    if (opts.json) {
+      console.log('\n--- JSON Stats ---');
+      console.log(JSON.stringify(allStats, null, 2));
+    }
+  } finally {
+    // Clear global caches to avoid any memory retention or stale states in long-running processes
+    globalResolvedCache.clear();
+    globalFileCache.clear();
   }
 }
 
