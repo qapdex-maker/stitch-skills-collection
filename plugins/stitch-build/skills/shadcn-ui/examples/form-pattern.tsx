@@ -90,7 +90,7 @@ export function UserProfileForm() {
                 </span>
               </FormLabel>
               <FormControl>
-                <Input placeholder="johndoe" {...field} />
+                <Input placeholder="johndoe" autoComplete="username" {...field} />
               </FormControl>
               <FormDescription>
                 This is your public display name.
@@ -112,7 +112,7 @@ export function UserProfileForm() {
                 </span>
               </FormLabel>
               <FormControl>
-                <Input type="email" placeholder="john@example.com" {...field} />
+                <Input type="email" placeholder="john@example.com" autoComplete="email" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
