@@ -230,9 +230,14 @@ export function isSafeUrl(urlStr: string): boolean {
       }
     }
 
-    // Block IPv6 link-local addresses (fe80::/10) and AWS IPv6 metadata address
+    // Block IPv6 link-local addresses (fe80::/10), AWS IPv6 metadata, Unique Local Addresses (fc00::/7),
+    // multicast (ff00::/8), and unspecified/all-zero (::) IPv6 addresses
     if (
       /^fe[89ab][0-9a-f]:/i.test(cleanHost) ||
+      /^f[cd][0-9a-f]{2}:/i.test(cleanHost) || // fc00::/7 (unique local address)
+      /^ff[0-9a-f]{2}:/i.test(cleanHost) ||    // ff00::/8 (multicast)
+      cleanHost === '::' ||
+      /^[0:]+$/.test(cleanHost) ||              // all-zero IPv6
       cleanHost === 'fd00:ec2::254'
     ) {
       return false;
