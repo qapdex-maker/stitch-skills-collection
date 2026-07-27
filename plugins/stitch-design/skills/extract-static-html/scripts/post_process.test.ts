@@ -428,6 +428,11 @@ test.describe('Snapshot URL Validation Security Tests', () => {
       'http://instance.metadata.azure.com/',
       'http://192.0.0.192/',
       'http://168.63.129.16/',
+      'http://[fc00::1]/',
+      'http://[fd12:3456:789a:1::1]/',
+      'http://[ff02::1]/',
+      'http://[::]/',
+      'http://[0000:0000:0000:0000:0000:0000:0000:0000]/',
     ];
     for (const url of metadataUrls) {
       assert.strictEqual(isSafeUrlSnapshot(url), false, `Expected link-local/metadata URL to be blocked by snapshot: ${url}`);
