@@ -19,7 +19,7 @@ import assert from 'node:assert';
 import path from 'node:path';
 import fs from 'node:fs';
 import { isSafePath, resolveLocalFile, extractCssUrls } from './post_process.js';
-import { isSafeUrl as isSafeUrlSnapshot } from './snapshot.js';
+import { isSafeUrl as isSafeUrlSnapshot, isSafeOutputPath } from './snapshot.js';
 
 // Local copy of isSafeUrl and ip6ToIpv4 from extract_inline_html.ts to avoid requiring @babel/parser dependency in unit tests
 function ip6ToIpv4(ip6: string): string | null {
@@ -436,6 +436,41 @@ test.describe('Snapshot URL Validation Security Tests', () => {
     ];
     for (const url of metadataUrls) {
       assert.strictEqual(isSafeUrlSnapshot(url), false, `Expected link-local/metadata URL to be blocked by snapshot: ${url}`);
+    }
+  });
+});
+
+test.describe('Snapshot Output Path Validation Security Tests', () => {
+  test('isSafeOutputPath should accept valid paths inside workspace', () => {
+    const validPaths = [
+      'output.html',
+      './output.html',
+      path.join(process.cwd(), 'output.html'),
+      'dist/output.html',
+    ];
+    for (const p of validPaths) {
+      assert.strictEqual(isSafeOutputPath(p), true, `Expected valid path inside workspace to be accepted: ${p}`);
+    }
+  });
+
+  test('isSafeOutputPath should reject traversal payloads escaping the workspace', () => {
+    const unsafePaths = [
+      '../outside.html',
+      '../../outside.html',
+      path.join(process.cwd(), '../outside.html'),
+      // Sibling prefix attacks
+      path.join(path.dirname(process.cwd()), path.basename(process.cwd()) + '-sibling/outside.html'),
+    ];
+
+    if (process.platform === 'win32') {
+      unsafePaths.push('C:\\Windows\\win.ini');
+      unsafePaths.push('..\\outside.html');
+    } else {
+      unsafePaths.push('/etc/passwd');
+    }
+
+    for (const p of unsafePaths) {
+      assert.strictEqual(isSafeOutputPath(p), false, `Expected path traversal payload to be rejected: ${p}`);
     }
   });
 });

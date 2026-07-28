@@ -249,6 +249,48 @@ export function isSafeUrl(urlStr: string): boolean {
   }
 }
 
+/**
+ * Validate that the output file path is safe and resides within the workspace (CWD).
+ * Prevents directory traversal and arbitrary file write outside the allowed directory.
+ */
+export function isSafeOutputPath(outputPath: string): boolean {
+  try {
+    const resolvedOutput = path.resolve(outputPath);
+    const resolvedCwd = path.resolve(process.cwd());
+
+    let canonicalOutput = resolvedOutput;
+    try {
+      if (fs.existsSync(resolvedOutput)) {
+        canonicalOutput = fs.realpathSync(resolvedOutput);
+      } else {
+        const parentDir = path.dirname(resolvedOutput);
+        if (fs.existsSync(parentDir)) {
+          canonicalOutput = path.join(fs.realpathSync(parentDir), path.basename(resolvedOutput));
+        }
+      }
+    } catch {
+      // Fallback to resolved output if realpath fails
+    }
+
+    let canonicalCwd = resolvedCwd;
+    try {
+      canonicalCwd = fs.realpathSync(resolvedCwd);
+    } catch {}
+
+    let normOutput = canonicalOutput;
+    let normCwd = canonicalCwd;
+    if (process.platform === 'win32') {
+      normOutput = normOutput.toLowerCase();
+      normCwd = normCwd.toLowerCase();
+    }
+
+    const safePrefix = normCwd.endsWith(path.sep) ? normCwd : normCwd + path.sep;
+    return normOutput === normCwd || normOutput.startsWith(safePrefix);
+  } catch {
+    return false;
+  }
+}
+
 function validateOpts(opts: Opts): void {
   const errors: string[] = [];
 
@@ -294,12 +336,16 @@ function validateOpts(opts: Opts): void {
   }
 
   if (opts.output) {
-    const outputDir = path.dirname(path.resolve(opts.output));
-    try {
-      fs.mkdirSync(outputDir, { recursive: true });
-      fs.accessSync(outputDir, fs.constants.W_OK);
-    } catch (e: unknown) {
-      errors.push(`Cannot write to output directory: ${(e as Error).message}`);
+    if (!isSafeOutputPath(opts.output)) {
+      errors.push(`Security Error: Output path "${opts.output}" escapes the workspace directory`);
+    } else {
+      const outputDir = path.dirname(path.resolve(opts.output));
+      try {
+        fs.mkdirSync(outputDir, { recursive: true });
+        fs.accessSync(outputDir, fs.constants.W_OK);
+      } catch (e: unknown) {
+        errors.push(`Cannot write to output directory: ${(e as Error).message}`);
+      }
     }
   }
 
