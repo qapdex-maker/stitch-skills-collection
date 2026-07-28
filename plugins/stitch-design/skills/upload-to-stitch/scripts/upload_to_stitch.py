@@ -232,6 +232,17 @@ def main():
     print("Error: Invalid --project-id format. Must contain only alphanumeric, hyphens, and underscores.")
     sys.exit(1)
 
+  # Security: Prevent path traversal / arbitrary file read (CWE-22) by ensuring file_path resolves within CWD.
+  try:
+    resolved_file_path = args.file_path.resolve()
+    resolved_cwd = pathlib.Path.cwd().resolve()
+    if resolved_cwd not in resolved_file_path.parents and resolved_file_path != resolved_cwd:
+      print("Error: --file-path must reside within the workspace directory")
+      sys.exit(1)
+  except Exception as e:
+    print(f"Error: Invalid or inaccessible file path: {e}")
+    sys.exit(1)
+
   file_path = args.file_path
   file_suffix = file_path.suffix.lower()
   mime_type = _MIME_TYPES.get(file_suffix)
