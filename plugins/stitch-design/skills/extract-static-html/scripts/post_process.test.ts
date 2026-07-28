@@ -447,13 +447,17 @@ test.describe('extractCssUrls parser tests', () => {
         background: url('foo.png');
         background-image: url("bar.jpg");
         list-style: url(baz.gif);
+        background: uRl('mixed.png');
+        background-image: urL("mixed2.jpg");
       }
     `;
     const urls = extractCssUrls(css);
-    assert.strictEqual(urls.length, 3);
+    assert.strictEqual(urls.length, 5);
     assert.strictEqual(urls[0].url, 'foo.png');
     assert.strictEqual(urls[1].url, 'bar.jpg');
     assert.strictEqual(urls[2].url, 'baz.gif');
+    assert.strictEqual(urls[3].url, 'mixed.png');
+    assert.strictEqual(urls[4].url, 'mixed2.jpg');
   });
 
   test('should parse urls with escapes and whitespace correctly', () => {
