@@ -585,8 +585,16 @@ async function snapshot(opts: Opts): Promise<void> {
           const results: Array<{ url: string; fullMatch: string; start: number; end: number }> = [];
           let i = 0;
           const len = cssText.length;
+          const urlStartRegexp = /url\(/gi;
 
           while (i < len) {
+            urlStartRegexp.lastIndex = i;
+            const match = urlStartRegexp.exec(cssText);
+            if (!match) {
+              break;
+            }
+
+            i = match.index;
             const char = cssText[i];
             // Look for 'url(' — case insensitive
             if (

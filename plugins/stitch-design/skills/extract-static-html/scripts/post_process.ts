@@ -168,12 +168,24 @@ function validateOpts(opts: Opts): void {
 // ---------------------------------------------------------------------------
 // Robust CSS url() parser — character-by-character (no regex)
 // ---------------------------------------------------------------------------
+const URL_START_REGEXP = /url\(/gi;
+
 export function extractCssUrls(text: string): CssUrlRef[] {
   const results: CssUrlRef[] = [];
   let i = 0;
   const len = text.length;
 
+  // Reset RegExp state
+  URL_START_REGEXP.lastIndex = 0;
+
   while (i < len) {
+    URL_START_REGEXP.lastIndex = i;
+    const match = URL_START_REGEXP.exec(text);
+    if (!match) {
+      break;
+    }
+
+    i = match.index;
     const char = text[i];
     if (
       i + 3 < len &&
