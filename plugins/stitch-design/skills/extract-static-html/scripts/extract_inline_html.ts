@@ -710,6 +710,9 @@ const REACT_ATTRS: Record<string, string> = {
   autoComplete: 'autocomplete', crossOrigin: 'crossorigin',
 };
 
+// Bolt optimization: Pre-compile list of React/special attributes to skip as a Set to avoid dynamic array allocations and O(N) lookup.
+const SKIP_REACT_ATTRS = new Set(['key', 'ref', 'dangerouslySetInnerHTML']);
+
 // HTML void elements (self-closing)
 const VOID_ELEMENTS = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
@@ -887,7 +890,7 @@ function renderAttributes(attrs: any[], tagName: string): string {
 
     // Skip event handlers and React-specific props
     if (name.startsWith('on') && name[2] === name[2]?.toUpperCase()) continue;
-    if (['key', 'ref', 'dangerouslySetInnerHTML'].includes(name)) continue;
+    if (SKIP_REACT_ATTRS.has(name)) continue;
 
     // Map React attributes
     if (REACT_ATTRS[name]) name = REACT_ATTRS[name];
