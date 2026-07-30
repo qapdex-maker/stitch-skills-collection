@@ -25,6 +25,8 @@ export function AuthLayout() {
     useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] =
     useState<boolean>(false);
+  const [registerPassword, setRegisterPassword] = useState<string>("");
+  const [confirmPassword, setConfirmPassword] = useState<string>("");
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -188,6 +190,8 @@ export function AuthLayout() {
                       autoComplete="new-password"
                       required
                       disabled={isLoading}
+                      value={registerPassword}
+                      onChange={(e) => setRegisterPassword(e.target.value)}
                     />
                     <button
                       type="button"
@@ -210,12 +214,28 @@ export function AuthLayout() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password">
-                    Confirm Password{" "}
-                    <span className="text-destructive" aria-hidden="true">
-                      *
-                    </span>
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="confirm-password">
+                      Confirm Password{" "}
+                      <span className="text-destructive" aria-hidden="true">
+                        *
+                      </span>
+                    </Label>
+                    {confirmPassword && (
+                      <span
+                        className={`text-xs ${
+                          registerPassword === confirmPassword
+                            ? "text-emerald-600 dark:text-emerald-400 font-medium"
+                            : "text-destructive font-medium"
+                        }`}
+                        aria-live="polite"
+                      >
+                        {registerPassword === confirmPassword
+                          ? "✓ Passwords match"
+                          : "✗ Passwords do not match"}
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <Input
                       id="confirm-password"
@@ -224,6 +244,8 @@ export function AuthLayout() {
                       autoComplete="new-password"
                       required
                       disabled={isLoading}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
                     />
                     <button
                       type="button"
@@ -249,7 +271,11 @@ export function AuthLayout() {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isLoading || (confirmPassword !== "" && registerPassword !== confirmPassword)}
+                >
                   {isLoading && (
                     <Loader2
                       className="mr-2 h-4 w-4 animate-spin"

@@ -29,3 +29,7 @@
 ## 2026-11-24 - Consolidating Form Live Character Counters
 **Learning:** Rendering duplicate character counters on a single text field (e.g. at the top of the field and inside the description footer) introduces visual redundancy and confusing duplicate screen reader updates. Consolidating into a single, beautifully positioned character counter with `aria-live="polite"` at the top-right of the text area improves both the visual aesthetic and accessible screen-reader experience.
 **Action:** Always ensure exactly one screen-reader accessible `aria-live="polite"` character counter is declared per text field, and avoid repeating the counter state in descriptions.
+
+## 2026-11-25 - Real-Time Match Validation for Secure Password Inputs
+**Learning:** For registration, authentication, or password update forms, tracking the state of both the new password and confirm password fields in real-time allows displaying elegant, accessible visual match feedback (utilizing green/red states and `aria-live="polite"`) and conditionally disabling submit controls to prevent submission of mismatched passwords.
+**Action:** Include a matching status indicator with `aria-live="polite"` adjacent to confirm password labels, and disable the form submission trigger upon any detected state mismatch.
