@@ -716,6 +716,10 @@ const VOID_ELEMENTS = new Set([
   'link', 'meta', 'param', 'source', 'track', 'wbr',
 ]);
 
+// Bolt optimization: Pre-compile excluded attributes into a module-level static Set to avoid
+// allocating a new array and performing O(N) linear search for every attribute loop iteration.
+const EXCLUDED_ATTRS = new Set(['key', 'ref', 'dangerouslySetInnerHTML']);
+
 function jsxToHtml(jsxSource: string): string | null {
   let ast;
   try {
@@ -887,7 +891,8 @@ function renderAttributes(attrs: any[], tagName: string): string {
 
     // Skip event handlers and React-specific props
     if (name.startsWith('on') && name[2] === name[2]?.toUpperCase()) continue;
-    if (['key', 'ref', 'dangerouslySetInnerHTML'].includes(name)) continue;
+    // Bolt optimization: use O(1) Set lookup to completely eliminate heap allocation on every single iteration
+    if (EXCLUDED_ATTRS.has(name)) continue;
 
     // Map React attributes
     if (REACT_ATTRS[name]) name = REACT_ATTRS[name];
