@@ -39,3 +39,7 @@
 ## 2026-07-28 - [Case-insensitive fast jumping in string scans using RegExp lastIndex]
 **Learning:** High-volume character-by-character scans can be significantly accelerated by jumping to matching tokens via native RegExp searches. However, when implementing native index jumps, manual search patterns can easily introduce bugs if they ignore case variations or complex character combinations. Using V8-native case-insensitive RegExp (`/pattern/gi`) with `lastIndex` and `.exec()` ensures complete case-insensitivity coverage and robust token matching while skipping millions of slow JavaScript loops.
 **Action:** Use case-insensitive RegExp literal references with `.exec()` and `lastIndex` pointers for safe, performant token indexing in JS/TS parsing routines.
+
+## 2026-07-29 - [Eliminating inline array allocations and linear lookups in high-frequency loops]
+**Learning:** In hot execution paths (like attribute serialization for every AST node during JSX-to-HTML rendering), allocating local literal arrays (such as `['key', 'ref', 'dangerouslySetInnerHTML']`) and performing lookup via `.includes()` generates substantial garbage collection overhead and runs in O(N) time. Pre-compiling the lookup targets into a static module-level `Set` completely avoids runtime array allocations and drops search complexity to O(1).
+**Action:** Always extract recurrent literal arrays used for exclusion or category filtering in hot loops to a static, module-level `Set` or pre-compiled map.
