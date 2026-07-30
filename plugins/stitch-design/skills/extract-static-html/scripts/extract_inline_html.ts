@@ -719,6 +719,10 @@ const VOID_ELEMENTS = new Set([
   'link', 'meta', 'param', 'source', 'track', 'wbr',
 ]);
 
+// Bolt optimization: Pre-compile excluded attributes into a module-level static Set to avoid
+// allocating a new array and performing O(N) linear search for every attribute loop iteration.
+const EXCLUDED_ATTRS = new Set(['key', 'ref', 'dangerouslySetInnerHTML']);
+
 function jsxToHtml(jsxSource: string): string | null {
   let ast;
   try {

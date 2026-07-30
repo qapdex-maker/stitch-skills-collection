@@ -30,6 +30,15 @@ if [[ "$OUTPUT_PATH" == -* ]]; then
   exit 1
 fi
 
+# Security: prevent path traversal / arbitrary file write (CWE-22) by ensuring output_path resolves within CWD
+RESOLVED_OUTPUT=$(python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$OUTPUT_PATH")
+RESOLVED_CWD=$(python3 -c "import os; print(os.path.realpath('.'))")
+
+if [[ "$RESOLVED_OUTPUT" != "$RESOLVED_CWD" && "$RESOLVED_OUTPUT" != "$RESOLVED_CWD"/* ]]; then
+  echo "Error: Output path must reside within the workspace directory"
+  exit 1
+fi
+
 # Create directory if it doesn't exist
 OUTPUT_DIR=$(dirname "$OUTPUT_PATH")
 mkdir -p "$OUTPUT_DIR"
