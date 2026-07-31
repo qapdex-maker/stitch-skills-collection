@@ -172,97 +172,83 @@ const URL_START_REGEXP = /url\(/gi;
 
 export function extractCssUrls(text: string): CssUrlRef[] {
   const results: CssUrlRef[] = [];
-  let i = 0;
   const len = text.length;
 
   // Reset RegExp state
   URL_START_REGEXP.lastIndex = 0;
 
-  while (i < len) {
-    URL_START_REGEXP.lastIndex = i;
-    const match = URL_START_REGEXP.exec(text);
-    if (!match) {
-      break;
+  // Bolt optimization: Use native V8 RegExp exec loop instead of redundant manual character validations
+  // and outer indexing, advancing lastIndex precisely depending on successful or failed parses.
+  let match;
+  while ((match = URL_START_REGEXP.exec(text)) !== null) {
+    const urlStart = match.index;
+    let i = urlStart + 4; // skip 'url('
+
+    // Skip whitespace
+    while (i < len && (text[i] === ' ' || text[i] === '\t' || text[i] === '\n' || text[i] === '\r')) i++;
+
+    let quote: string | null = null;
+    if (i < len && (text[i] === '"' || text[i] === "'")) {
+      quote = text[i];
+      i++;
     }
 
-    i = match.index;
-    const char = text[i];
-    if (
-      i + 3 < len &&
-      (char === 'u' || char === 'U') &&
-      (text[i + 1] === 'r' || text[i + 1] === 'R') &&
-      (text[i + 2] === 'l' || text[i + 2] === 'L') &&
-      text[i + 3] === '('
-    ) {
-      const urlStart = i;
-      i += 4;
-
-      // Skip whitespace
-      while (i < len && (text[i] === ' ' || text[i] === '\t' || text[i] === '\n' || text[i] === '\r')) i++;
-
-      let quote: string | null = null;
-      if (i < len && (text[i] === '"' || text[i] === "'")) {
-        quote = text[i];
-        i++;
-      }
-
-      let url = '';
-      if (quote) {
-        const urlStartIdx = i;
-        let hasEscape = false;
-        while (i < len && text[i] !== quote) {
-          if (text[i] === '\\' && i + 1 < len) {
-            hasEscape = true;
-            i += 2;
-          } else {
-            i++;
-          }
-        }
-        if (hasEscape) {
-          // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
-          // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
-          const parts: string[] = [];
-          let j = urlStartIdx;
-          let lastIdx = urlStartIdx;
-          while (j < i) {
-            if (text[j] === '\\' && j + 1 < i) {
-              if (j > lastIdx) {
-                parts.push(text.substring(lastIdx, j));
-              }
-              parts.push(text[j + 1]);
-              j += 2;
-              lastIdx = j;
-            } else {
-              j++;
-            }
-          }
-          if (j > lastIdx) {
-            parts.push(text.substring(lastIdx, j));
-          }
-          url = parts.join('');
+    let url = '';
+    if (quote) {
+      const urlStartIdx = i;
+      let hasEscape = false;
+      while (i < len && text[i] !== quote) {
+        if (text[i] === '\\' && i + 1 < len) {
+          hasEscape = true;
+          i += 2;
         } else {
-          url = text.substring(urlStartIdx, i);
-        }
-        if (i < len) i++;
-      } else {
-        const urlStartIdx = i;
-        while (i < len && text[i] !== ')' && text[i] !== ' ' && text[i] !== '\t' && text[i] !== '\n') {
           i++;
         }
+      }
+      if (hasEscape) {
+        // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
+        // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
+        const parts: string[] = [];
+        let j = urlStartIdx;
+        let lastIdx = urlStartIdx;
+        while (j < i) {
+          if (text[j] === '\\' && j + 1 < i) {
+            if (j > lastIdx) {
+              parts.push(text.substring(lastIdx, j));
+            }
+            parts.push(text[j + 1]);
+            j += 2;
+            lastIdx = j;
+          } else {
+            j++;
+          }
+        }
+        if (j > lastIdx) {
+          parts.push(text.substring(lastIdx, j));
+        }
+        url = parts.join('');
+      } else {
         url = text.substring(urlStartIdx, i);
       }
-
-      while (i < len && (text[i] === ' ' || text[i] === '\t' || text[i] === '\n' || text[i] === '\r')) i++;
-
-      if (i < len && text[i] === ')') {
-        const fullMatch = text.substring(urlStart, i + 1);
-        results.push({ url: url.trim(), fullMatch, start: urlStart, end: i + 1 });
-        i++;
-      } else {
-        i = urlStart + 1;
-      }
+      if (i < len) i++;
     } else {
-      i++;
+      const urlStartIdx = i;
+      while (i < len && text[i] !== ')' && text[i] !== ' ' && text[i] !== '\t' && text[i] !== '\n') {
+        i++;
+      }
+      url = text.substring(urlStartIdx, i);
+    }
+
+    while (i < len && (text[i] === ' ' || text[i] === '\t' || text[i] === '\n' || text[i] === '\r')) i++;
+
+    if (i < len && text[i] === ')') {
+      const fullMatch = text.substring(urlStart, i + 1);
+      results.push({ url: url.trim(), fullMatch, start: urlStart, end: i + 1 });
+      // Resume scanning from right after the closing parenthesised URL block
+      URL_START_REGEXP.lastIndex = i + 1;
+    } else {
+      // Resume scanning from right after "url(" to handle nested/malformed CSS tokens correctly
+      URL_START_REGEXP.lastIndex = urlStart + 1;
     }
   }
 
