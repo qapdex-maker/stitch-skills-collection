@@ -629,130 +629,117 @@ async function snapshot(opts: Opts): Promise<void> {
          */
         extractCssUrls: (cssText: string) => {
           const results: Array<{ url: string; fullMatch: string; start: number; end: number }> = [];
-          let i = 0;
           const len = cssText.length;
           const urlStartRegexp = /url\(/gi;
 
-          while (i < len) {
-            urlStartRegexp.lastIndex = i;
-            const match = urlStartRegexp.exec(cssText);
-            if (!match) {
-              break;
+          // Reset RegExp state
+          urlStartRegexp.lastIndex = 0;
+
+          // Bolt optimization: Use native V8 RegExp exec loop instead of redundant manual character validations
+          // and outer indexing, advancing lastIndex precisely depending on successful or failed parses.
+          let match;
+          while ((match = urlStartRegexp.exec(cssText)) !== null) {
+            const urlStart = match.index;
+            let i = urlStart + 4; // skip 'url('
+
+            // Skip whitespace
+            while (
+              i < len &&
+              (cssText[i] === ' ' ||
+                cssText[i] === '\t' ||
+                cssText[i] === '\n' ||
+                cssText[i] === '\r')
+            ) {
+              i++;
             }
 
-            i = match.index;
-            const char = cssText[i];
-            // Look for 'url(' — case insensitive
-            if (
-              i + 3 < len &&
-              (char === 'u' || char === 'U') &&
-              (cssText[i + 1] === 'r' || cssText[i + 1] === 'R') &&
-              (cssText[i + 2] === 'l' || cssText[i + 2] === 'L') &&
-              cssText[i + 3] === '('
-            ) {
-              const urlStart = i;
-              i += 4; // skip 'url('
+            // Check for quote
+            let quote: string | null = null;
+            if (i < len && (cssText[i] === '"' || cssText[i] === "'")) {
+              quote = cssText[i];
+              i++;
+            }
 
-              // Skip whitespace
-              while (
-                i < len &&
-                (cssText[i] === ' ' ||
-                  cssText[i] === '\t' ||
-                  cssText[i] === '\n' ||
-                  cssText[i] === '\r')
-              ) {
-                i++;
-              }
-
-              // Check for quote
-              let quote: string | null = null;
-              if (i < len && (cssText[i] === '"' || cssText[i] === "'")) {
-                quote = cssText[i];
-                i++;
-              }
-
-              // Read the URL value
-              let url = '';
-              if (quote) {
-                const urlStartIdx = i;
-                let hasEscape = false;
-                // Quoted: read until matching unescaped quote
-                while (i < len && cssText[i] !== quote) {
-                  if (cssText[i] === '\\' && i + 1 < len) {
-                    hasEscape = true;
-                    i += 2;
-                  } else {
-                    i++;
-                  }
-                }
-                if (hasEscape) {
-                  // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
-                  // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
-                  const parts: string[] = [];
-                  let j = urlStartIdx;
-                  let lastIdx = urlStartIdx;
-                  while (j < i) {
-                    if (cssText[j] === '\\' && j + 1 < i) {
-                      if (j > lastIdx) {
-                        parts.push(cssText.substring(lastIdx, j));
-                      }
-                      parts.push(cssText[j + 1]);
-                      j += 2;
-                      lastIdx = j;
-                    } else {
-                      j++;
-                    }
-                  }
-                  if (j > lastIdx) {
-                    parts.push(cssText.substring(lastIdx, j));
-                  }
-                  url = parts.join('');
+            // Read the URL value
+            let url = '';
+            if (quote) {
+              const urlStartIdx = i;
+              let hasEscape = false;
+              // Quoted: read until matching unescaped quote
+              while (i < len && cssText[i] !== quote) {
+                if (cssText[i] === '\\' && i + 1 < len) {
+                  hasEscape = true;
+                  i += 2;
                 } else {
-                  url = cssText.substring(urlStartIdx, i);
-                }
-                if (i < len) i++; // skip closing quote
-              } else {
-                // Unquoted: stop at ) or whitespace (per CSS spec)
-                const urlStartIdx = i;
-                while (
-                  i < len &&
-                  cssText[i] !== ')' &&
-                  cssText[i] !== ' ' &&
-                  cssText[i] !== '\t' &&
-                  cssText[i] !== '\n' &&
-                  cssText[i] !== '\r'
-                ) {
                   i++;
                 }
+              }
+              if (hasEscape) {
+                // Bolt optimization: use substring slices and array join instead of character-by-character concatenation
+                // inside loop to eliminate GC pressure and heavy string allocations for escaped URLs.
+                const parts: string[] = [];
+                let j = urlStartIdx;
+                let lastIdx = urlStartIdx;
+                while (j < i) {
+                  if (cssText[j] === '\\' && j + 1 < i) {
+                    if (j > lastIdx) {
+                      parts.push(cssText.substring(lastIdx, j));
+                    }
+                    parts.push(cssText[j + 1]);
+                    j += 2;
+                    lastIdx = j;
+                  } else {
+                    j++;
+                  }
+                }
+                if (j > lastIdx) {
+                  parts.push(cssText.substring(lastIdx, j));
+                }
+                url = parts.join('');
+              } else {
                 url = cssText.substring(urlStartIdx, i);
               }
-
-              // Skip trailing whitespace before ')'
+              if (i < len) i++; // skip closing quote
+            } else {
+              // Unquoted: stop at ) or whitespace (per CSS spec)
+              const urlStartIdx = i;
               while (
                 i < len &&
-                (cssText[i] === ' ' ||
-                  cssText[i] === '\t' ||
-                  cssText[i] === '\n' ||
-                  cssText[i] === '\r')
+                cssText[i] !== ')' &&
+                cssText[i] !== ' ' &&
+                cssText[i] !== '\t' &&
+                cssText[i] !== '\n' &&
+                cssText[i] !== '\r'
               ) {
                 i++;
               }
+              url = cssText.substring(urlStartIdx, i);
+            }
 
-              if (i < len && cssText[i] === ')') {
-                const fullMatch = cssText.substring(urlStart, i + 1);
-                results.push({
-                  url: url.trim(),
-                  fullMatch,
-                  start: urlStart,
-                  end: i + 1,
-                });
-                i++;
-              } else {
-                // Malformed url() — skip past 'url(' and try again
-                i = urlStart + 1;
-              }
-            } else {
+            // Skip trailing whitespace before ')'
+            while (
+              i < len &&
+              (cssText[i] === ' ' ||
+                cssText[i] === '\t' ||
+                cssText[i] === '\n' ||
+                cssText[i] === '\r')
+            ) {
               i++;
+            }
+
+            if (i < len && cssText[i] === ')') {
+              const fullMatch = cssText.substring(urlStart, i + 1);
+              results.push({
+                url: url.trim(),
+                fullMatch,
+                start: urlStart,
+                end: i + 1,
+              });
+              // Resume scanning from right after the closing parenthesised URL block
+              urlStartRegexp.lastIndex = i + 1;
+            } else {
+              // Resume scanning from right after "url(" to handle nested/malformed CSS tokens correctly
+              urlStartRegexp.lastIndex = urlStart + 1;
             }
           }
 
