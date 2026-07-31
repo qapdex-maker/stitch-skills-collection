@@ -33,3 +33,7 @@
 ## 2026-11-25 - Real-Time Match Validation for Secure Password Inputs
 **Learning:** For registration, authentication, or password update forms, tracking the state of both the new password and confirm password fields in real-time allows displaying elegant, accessible visual match feedback (utilizing green/red states and `aria-live="polite"`) and conditionally disabling submit controls to prevent submission of mismatched passwords.
 **Action:** Include a matching status indicator with `aria-live="polite"` adjacent to confirm password labels, and disable the form submission trigger upon any detected state mismatch.
+
+## 2026-11-26 - Preventing Focus Loss on Conditional Clear Buttons
+**Learning:** When an input field features an inline conditional "Clear" button that is unmounted once the input becomes empty, keyboard/screen-reader users lose active focus entirely (which typically resets back to the body). Instantly transferring focus back to the input element on click/activation ensures that keyboard navigation flow is not disrupted.
+**Action:** Always bind a ref to input elements with conditional unmounting clear actions, and manually trigger `.focus()` on the input when the clear action is performed.

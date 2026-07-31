@@ -171,6 +171,7 @@ export function DataTableExample() {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState({})
   const [rowSelection, setRowSelection] = React.useState({})
+  const filterInputRef = React.useRef<HTMLInputElement>(null)
 
   const table = useReactTable({
     data,
@@ -196,6 +197,7 @@ export function DataTableExample() {
       <div className="flex items-center py-4">
         <div className="relative w-full max-w-sm">
           <Input
+            ref={filterInputRef}
             placeholder="Filter names..."
             aria-label="Filter names"
             value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
@@ -207,7 +209,10 @@ export function DataTableExample() {
           {((table.getColumn("name")?.getFilterValue() as string) ?? "") && (
             <button
               type="button"
-              onClick={() => table.getColumn("name")?.setFilterValue("")}
+              onClick={() => {
+                table.getColumn("name")?.setFilterValue("")
+                filterInputRef.current?.focus()
+              }}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 rounded-sm"
               aria-label="Clear filter"
               title="Clear filter"
