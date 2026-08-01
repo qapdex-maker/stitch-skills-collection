@@ -14,7 +14,7 @@ import {
     SortingState,
     useReactTable,
 } from "@tanstack/react-table"
-import { ArrowUpDown, ChevronDown, MoreHorizontal, X } from "lucide-react"
+import { ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, MoreHorizontal, X } from "lucide-react"
 import * as React from "react"
 
 import { Button } from "@/components/ui/button"
@@ -91,7 +91,13 @@ export const columns: ColumnDef<User>[] = [
           aria-label={`Name, ${ariaLabel}`}
         >
           Name
-          <ArrowUpDown className="ml-2 h-4 w-4" aria-hidden="true" />
+          {isSorted === "asc" ? (
+            <ArrowUp className="ml-2 h-4 w-4 text-foreground" aria-hidden="true" />
+          ) : isSorted === "desc" ? (
+            <ArrowDown className="ml-2 h-4 w-4 text-foreground" aria-hidden="true" />
+          ) : (
+            <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          )}
         </Button>
       )
     },
@@ -115,7 +121,13 @@ export const columns: ColumnDef<User>[] = [
           aria-label={`Email, ${ariaLabel}`}
         >
           Email
-          <ArrowUpDown className="ml-2 h-4 w-4" aria-hidden="true" />
+          {isSorted === "asc" ? (
+            <ArrowUp className="ml-2 h-4 w-4 text-foreground" aria-hidden="true" />
+          ) : isSorted === "desc" ? (
+            <ArrowDown className="ml-2 h-4 w-4 text-foreground" aria-hidden="true" />
+          ) : (
+            <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          )}
         </Button>
       )
     },
@@ -291,7 +303,23 @@ export function DataTableExample() {
                   colSpan={columns.length}
                   className="h-24 text-center"
                 >
-                  No results.
+                  <div className="flex flex-col items-center justify-center gap-1.5 py-4">
+                    <p className="text-sm font-medium text-muted-foreground">No results found.</p>
+                    {!!(table.getColumn("name")?.getFilterValue() as string) && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        onClick={() => {
+                          table.getColumn("name")?.setFilterValue("")
+                          inputRef.current?.focus()
+                        }}
+                        className="h-auto p-0 text-xs text-primary"
+                        aria-label="Clear active filter"
+                      >
+                        Clear the filter to show all rows
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             )}
