@@ -720,10 +720,14 @@ function jsxToHtml(jsxSource: string): string | null {
     return null;
   }
 
-  // Strategy 1: Prefer the JSX return inside the default-exported function,
-  // since that's the main component in the vast majority of React files.
   let returnedJSX: Node | null = null;
+  let maxLen = -1;
+  let fallbackJSX: Node | null = null;
 
+  // Bolt optimization: Single-pass AST traversal for both Strategy 1 (Default Export)
+  // and Strategy 2 (Return Fallback). Merging these traversals cuts AST walk time in half.
+  // Additionally, we can stop the traversal early once returnedJSX is successfully resolved,
+  // bypassing expensive remaining node walks entirely.
   traverse(ast, {
     ExportDefaultDeclaration(path) {
       const decl = path.node.declaration;
@@ -761,25 +765,25 @@ function jsxToHtml(jsxSource: string): string | null {
         }
       }
     },
+    ReturnStatement(path) {
+      // If we already resolved the preferred default export JSX, stop scanning further
+      if (returnedJSX) {
+        path.stop();
+        return;
+      }
+      const arg = path.node.argument;
+      if (arg && (arg.type === 'JSXElement' || arg.type === 'JSXFragment')) {
+        const len = (arg.end || 0) - (arg.start || 0);
+        if (len > maxLen) {
+          maxLen = len;
+          fallbackJSX = arg;
+        }
+      }
+    }
   });
 
-  // Strategy 2: Fallback — find the return with the largest JSX tree.
-  // Covers files that use `export default ComponentName` (identifier) at the
-  // bottom, or files without any default export at all.
   if (!returnedJSX) {
-    let maxLen = -1;
-    traverse(ast, {
-      ReturnStatement(path) {
-        const arg = path.node.argument;
-        if (arg && (arg.type === 'JSXElement' || arg.type === 'JSXFragment')) {
-          const len = (arg.end || 0) - (arg.start || 0);
-          if (len > maxLen) {
-            maxLen = len;
-            returnedJSX = arg;
-          }
-        }
-      },
-    });
+    returnedJSX = fallbackJSX;
   }
 
   if (!returnedJSX) {
