@@ -27,6 +27,11 @@ export function AuthLayout() {
     useState<boolean>(false);
   const [registerPassword, setRegisterPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
+  const [isCapsLockActive, setIsCapsLockActive] = useState<boolean>(false);
+
+  function handleKeyUpDown(event: React.KeyboardEvent) {
+    setIsCapsLockActive(event.getModifierState("CapsLock"));
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -77,12 +82,22 @@ export function AuthLayout() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">
-                    Password{" "}
-                    <span className="text-destructive" aria-hidden="true">
-                      *
-                    </span>
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">
+                      Password{" "}
+                      <span className="text-destructive" aria-hidden="true">
+                        *
+                      </span>
+                    </Label>
+                    {isCapsLockActive && (
+                      <span
+                        className="text-xs text-amber-600 dark:text-amber-400 font-medium"
+                        aria-live="polite"
+                      >
+                        ⚠️ Caps Lock is active
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <Input
                       id="password"
@@ -91,6 +106,8 @@ export function AuthLayout() {
                       autoComplete="current-password"
                       required
                       disabled={isLoading}
+                      onKeyDown={handleKeyUpDown}
+                      onKeyUp={handleKeyUpDown}
                     />
                     <button
                       type="button"
@@ -176,12 +193,22 @@ export function AuthLayout() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="register-password">
-                    Password{" "}
-                    <span className="text-destructive" aria-hidden="true">
-                      *
-                    </span>
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="register-password">
+                      Password{" "}
+                      <span className="text-destructive" aria-hidden="true">
+                        *
+                      </span>
+                    </Label>
+                    {isCapsLockActive && (
+                      <span
+                        className="text-xs text-amber-600 dark:text-amber-400 font-medium"
+                        aria-live="polite"
+                      >
+                        ⚠️ Caps Lock is active
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <Input
                       id="register-password"
@@ -192,6 +219,8 @@ export function AuthLayout() {
                       disabled={isLoading}
                       value={registerPassword}
                       onChange={(e) => setRegisterPassword(e.target.value)}
+                      onKeyDown={handleKeyUpDown}
+                      onKeyUp={handleKeyUpDown}
                     />
                     <button
                       type="button"
@@ -221,20 +250,30 @@ export function AuthLayout() {
                         *
                       </span>
                     </Label>
-                    {confirmPassword && (
-                      <span
-                        className={`text-xs ${
-                          registerPassword === confirmPassword
-                            ? "text-emerald-600 dark:text-emerald-400 font-medium"
-                            : "text-destructive font-medium"
-                        }`}
-                        aria-live="polite"
-                      >
-                        {registerPassword === confirmPassword
-                          ? "✓ Passwords match"
-                          : "✗ Passwords do not match"}
-                      </span>
-                    )}
+                    <div className="flex gap-2 text-xs">
+                      {isCapsLockActive && (
+                        <span
+                          className="text-amber-600 dark:text-amber-400 font-medium"
+                          aria-live="polite"
+                        >
+                          ⚠️ Caps Lock is active
+                        </span>
+                      )}
+                      {confirmPassword && (
+                        <span
+                          className={`${
+                            registerPassword === confirmPassword
+                              ? "text-emerald-600 dark:text-emerald-400 font-medium"
+                              : "text-destructive font-medium"
+                          }`}
+                          aria-live="polite"
+                        >
+                          {registerPassword === confirmPassword
+                            ? "✓ Passwords match"
+                            : "✗ Passwords do not match"}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="relative">
                     <Input
@@ -246,6 +285,8 @@ export function AuthLayout() {
                       disabled={isLoading}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
+                      onKeyDown={handleKeyUpDown}
+                      onKeyUp={handleKeyUpDown}
                     />
                     <button
                       type="button"

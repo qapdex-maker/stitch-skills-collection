@@ -41,3 +41,7 @@
 ## 2026-11-27 - High-Contrast Column Sort Cues and Focus-Retentive Empty States
 **Learning:** Static sort-direction icons (like ArrowUpDown) do not provide clear visual distinction for active sorting states, leading to cognitive fatigue as users re-scan table data. Replacing them with distinct ArrowUp/ArrowDown icons on active sort directions instantly clarifies the interface. In addition, when tables return zero results due to active filtering, providing a focus-retentive "Clear filter" action inside the empty cell prevents dead-ends and ensures keyboard navigation flow is not disrupted.
 **Action:** Render conditional high-contrast sort icons for active column headers, and accompany empty states with focus-retentive, inline clear-filter controls.
+
+## 2026-11-28 - Real-Time Caps Lock Detection for Password Entry
+**Learning:** Users frequently mistype passwords without realizing that Caps Lock is active, leading to login frustration. Providing real-time, highly visible, but screen-reader polite Caps Lock warnings adjacent to secure input fields (using standard React keyboard modifier state tracking and `aria-live="polite"`) significantly improves accessibility and prevents entry errors.
+**Action:** Bind `onKeyDown` and `onKeyUp` listeners using `event.getModifierState("CapsLock")` to password input components, and render a helpful warnings container adjacent to fields when active.
