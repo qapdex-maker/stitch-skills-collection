@@ -51,3 +51,7 @@
 ## 2026-08-01 - [Merging multi-stage AST traversal steps into single-pass AST walks with early-termination]
 **Learning:** In JSX-to-HTML AST compilation and validation, performing separate sequential AST traversals (such as looking for export default components in one pass and looking for return statements as a fallback in another) scales poorly for larger files because it repeats AST node traversal. Merging these steps into a single visitor specification and immediately stopping the entire traversal (`path.stop()`) when the preferred node is resolved prevents redundant walks and cuts AST walking cycles in half.
 **Action:** Avoid multiple traversal scans over the same AST; consolidate into a single consolidated traverse pass and use `path.stop()` to exit early when complete.
+
+## 2026-08-02 - [Eliminating browser layout thrashing in snapshot and style unlocking logic]
+**Learning:** Interleaving DOM queries/measurements (such as calling `getComputedStyle(el)` or `getBoundingClientRect()`) and DOM mutations (such as calling `el.remove()` or setting styles like `el.style.setProperty(...)`) inside a loop over many elements causes severe layout thrashing (forced synchronous reflows) in browsers. Splitting the process into a distinct 'Read Phase' and a subsequent 'Write Phase' eliminates the thrashing bottleneck entirely, enabling highly performant browser snapshotting.
+**Action:** Always batch DOM reads and DOM writes into distinct separate phases instead of interleaving them inside high-frequency loops.

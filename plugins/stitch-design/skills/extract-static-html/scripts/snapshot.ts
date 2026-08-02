@@ -515,14 +515,20 @@ async function snapshot(opts: Opts): Promise<void> {
       console.log('🧹 Removing fixed/sticky positioned elements...');
       await page.evaluate(() => {
         const all = document.querySelectorAll('*');
+        const toRemove: Element[] = [];
+        // Read Phase: Retrieve styles and bounding rects without modifying the DOM
         for (const el of all) {
           const style = getComputedStyle(el);
           if (style.position === 'fixed' || style.position === 'sticky') {
             const rect = el.getBoundingClientRect();
             if (rect.top > 100 || rect.height < 50) {
-              el.remove();
+              toRemove.push(el);
             }
           }
+        }
+        // Write Phase: Remove nodes from the DOM to avoid layout thrashing
+        for (const el of toRemove) {
+          el.remove();
         }
       });
     }
@@ -997,6 +1003,13 @@ async function snapshot(opts: Opts): Promise<void> {
         document.body.style.setProperty('overflow', 'visible', 'important');
 
         const elements = document.querySelectorAll('*');
+        const updates: Array<{
+          el: HTMLElement;
+          hasViewportHeight: boolean;
+          isScrollable: boolean;
+        }> = [];
+
+        // Read Phase: Measure and check elements' computed styles without triggering style writes
         for (const el of elements) {
           const style = getComputedStyle(el);
           const hasViewportHeight = style.height.includes('vh') ||
@@ -1012,17 +1025,32 @@ async function snapshot(opts: Opts): Promise<void> {
             el.classList.contains('ac-iframe-inlined-wrapper') ||
             el.classList.contains('ac-iframe');
 
-          if (hasViewportHeight) {
-            (el as HTMLElement).style.setProperty('height', 'auto', 'important');
-            (el as HTMLElement).style.setProperty('min-height', '0', 'important');
-            (el as HTMLElement).style.setProperty('max-height', 'none', 'important');
-          }
+          const isScrollable = style.overflow === 'auto' ||
+            style.overflowY === 'auto' ||
+            style.overflow === 'scroll' ||
+            style.overflowY === 'scroll';
 
-          if (style.overflow === 'auto' || style.overflowY === 'auto' || style.overflow === 'scroll' || style.overflowY === 'scroll') {
-            (el as HTMLElement).style.setProperty('height', 'auto', 'important');
-            (el as HTMLElement).style.setProperty('max-height', 'none', 'important');
-            (el as HTMLElement).style.setProperty('overflow', 'visible', 'important');
-            (el as HTMLElement).style.setProperty('position', 'relative', 'important');
+          if (hasViewportHeight || isScrollable) {
+            updates.push({
+              el: el as HTMLElement,
+              hasViewportHeight,
+              isScrollable,
+            });
+          }
+        }
+
+        // Write Phase: Apply style changes to the matched elements sequentially
+        for (const update of updates) {
+          if (update.hasViewportHeight) {
+            update.el.style.setProperty('height', 'auto', 'important');
+            update.el.style.setProperty('min-height', '0', 'important');
+            update.el.style.setProperty('max-height', 'none', 'important');
+          }
+          if (update.isScrollable) {
+            update.el.style.setProperty('height', 'auto', 'important');
+            update.el.style.setProperty('max-height', 'none', 'important');
+            update.el.style.setProperty('overflow', 'visible', 'important');
+            update.el.style.setProperty('position', 'relative', 'important');
           }
         }
       });
