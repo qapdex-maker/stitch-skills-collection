@@ -37,3 +37,7 @@
 ## 2026-11-26 - Preventing Focus Loss on Conditional Inline Input Clear Controls
 **Learning:** In interactive input fields (such as search/filtering inputs) that conditionally render inline 'Clear' buttons, clicking the button causes it to unmount immediately. This results in an immediate loss of keyboard focus, resetting the active keyboard focus element back to the document body. To maintain a smooth and accessible keyboard-navigation flow, binding a React `useRef` to the input element and invoking `.focus()` inside the click handler immediately after resetting the value ensures focus is smoothly returned to the input.
 **Action:** Always bind a ref to text input components and manually focus them when unmounting conditional inline controls like 'Clear' or 'Reset' buttons.
+
+## 2026-11-27 - High-Contrast Column Sort Cues and Focus-Retentive Empty States
+**Learning:** Static sort-direction icons (like ArrowUpDown) do not provide clear visual distinction for active sorting states, leading to cognitive fatigue as users re-scan table data. Replacing them with distinct ArrowUp/ArrowDown icons on active sort directions instantly clarifies the interface. In addition, when tables return zero results due to active filtering, providing a focus-retentive "Clear filter" action inside the empty cell prevents dead-ends and ensures keyboard navigation flow is not disrupted.
+**Action:** Render conditional high-contrast sort icons for active column headers, and accompany empty states with focus-retentive, inline clear-filter controls.
