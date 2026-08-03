@@ -980,9 +980,9 @@ async function snapshot(opts: Opts): Promise<void> {
         let maxVal = document.documentElement.scrollHeight;
         const all = document.querySelectorAll('*');
         for (const el of all) {
-          const style = getComputedStyle(el);
-          if (style.overflow === 'auto' || style.overflowY === 'auto' || style.overflow === 'scroll' || style.overflowY === 'scroll') {
-            if (el.scrollHeight > maxVal) {
+          if (el.scrollHeight > maxVal) {
+            const style = getComputedStyle(el);
+            if (style.overflow === 'auto' || style.overflowY === 'auto' || style.overflow === 'scroll' || style.overflowY === 'scroll') {
               maxVal = el.scrollHeight;
             }
           }

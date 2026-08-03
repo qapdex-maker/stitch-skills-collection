@@ -55,3 +55,7 @@
 ## 2026-08-02 - [Eliminating browser layout thrashing in snapshot and style unlocking logic]
 **Learning:** Interleaving DOM queries/measurements (such as calling `getComputedStyle(el)` or `getBoundingClientRect()`) and DOM mutations (such as calling `el.remove()` or setting styles like `el.style.setProperty(...)`) inside a loop over many elements causes severe layout thrashing (forced synchronous reflows) in browsers. Splitting the process into a distinct 'Read Phase' and a subsequent 'Write Phase' eliminates the thrashing bottleneck entirely, enabling highly performant browser snapshotting.
 **Action:** Always batch DOM reads and DOM writes into distinct separate phases instead of interleaving them inside high-frequency loops.
+
+## 2026-08-03 - [Re-ordering property guard checks before layout style resolution APIs]
+**Learning:** When scanning a large list of DOM elements for scrollable containers (with fullHeight snapshots enabled), calling the layout-triggering `getComputedStyle` style resolution on every single element creates huge computing overhead. Since we only care about elements that exceed the viewport or current maximum scroll height, re-ordering the logic to check `el.scrollHeight > maxVal` *before* invoking `getComputedStyle` completely avoids style computations for almost all elements.
+**Action:** Always evaluate lightweight DOM properties (such as scrollHeight, clientWidth, etc.) first as a guard before performing heavy style computed resolution calls.
