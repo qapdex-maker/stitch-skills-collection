@@ -40,6 +40,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
           <a
             href="#"
             className="font-semibold text-primary hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm truncate"
+            title={username}
           >
             {username}
           </a>
@@ -54,6 +55,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
           <a
             href="#"
             className="text-primary hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm truncate"
+            title={repoName}
           >
             {repoName}
           </a>

@@ -45,3 +45,7 @@
 ## 2026-11-28 - Real-Time Caps Lock Detection for Password Entry
 **Learning:** Users frequently mistype passwords without realizing that Caps Lock is active, leading to login frustration. Providing real-time, highly visible, but screen-reader polite Caps Lock warnings adjacent to secure input fields (using standard React keyboard modifier state tracking and `aria-live="polite"`) significantly improves accessibility and prevents entry errors.
 **Action:** Bind `onKeyDown` and `onKeyUp` listeners using `event.getModifierState("CapsLock")` to password input components, and render a helpful warnings container adjacent to fields when active.
+
+## 2026-11-29 - Persistent Live Containers and Truncated Node Accessibility
+**Learning:** Dynamic live message containers (e.g., Caps Lock indicators or password match reports) that conditionally mount/unmount tend to break screen reader tracking because assistive software may not watch dynamically injected root live regions. Keeping the `aria-live` containers persistently mounted in the DOM while conditionally outputting text solves this elegantly. Additionally, truncated links or names should include a native `title` attribute so hover and keyboard users can discover the un-truncated content.
+**Action:** Always render `aria-live="polite"` wrapper elements persistently in JSX, and attach standard HTML `title` attributes on truncated links.

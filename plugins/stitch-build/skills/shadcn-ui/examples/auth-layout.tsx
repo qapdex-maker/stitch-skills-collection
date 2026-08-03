@@ -89,14 +89,12 @@ export function AuthLayout() {
                         *
                       </span>
                     </Label>
-                    {isCapsLockActive && (
-                      <span
-                        className="text-xs text-amber-600 dark:text-amber-400 font-medium"
-                        aria-live="polite"
-                      >
-                        ⚠️ Caps Lock is active
-                      </span>
-                    )}
+                    <span
+                      className="text-xs text-amber-600 dark:text-amber-400 font-medium"
+                      aria-live="polite"
+                    >
+                      {isCapsLockActive ? "⚠️ Caps Lock is active" : ""}
+                    </span>
                   </div>
                   <div className="relative">
                     <Input
@@ -200,14 +198,12 @@ export function AuthLayout() {
                         *
                       </span>
                     </Label>
-                    {isCapsLockActive && (
-                      <span
-                        className="text-xs text-amber-600 dark:text-amber-400 font-medium"
-                        aria-live="polite"
-                      >
-                        ⚠️ Caps Lock is active
-                      </span>
-                    )}
+                    <span
+                      className="text-xs text-amber-600 dark:text-amber-400 font-medium"
+                      aria-live="polite"
+                    >
+                      {isCapsLockActive ? "⚠️ Caps Lock is active" : ""}
+                    </span>
                   </div>
                   <div className="relative">
                     <Input
@@ -251,28 +247,28 @@ export function AuthLayout() {
                       </span>
                     </Label>
                     <div className="flex gap-2 text-xs">
-                      {isCapsLockActive && (
-                        <span
-                          className="text-amber-600 dark:text-amber-400 font-medium"
-                          aria-live="polite"
-                        >
-                          ⚠️ Caps Lock is active
-                        </span>
-                      )}
-                      {confirmPassword && (
-                        <span
-                          className={`${
-                            registerPassword === confirmPassword
-                              ? "text-emerald-600 dark:text-emerald-400 font-medium"
-                              : "text-destructive font-medium"
-                          }`}
-                          aria-live="polite"
-                        >
-                          {registerPassword === confirmPassword
+                      <span
+                        className="text-amber-600 dark:text-amber-400 font-medium"
+                        aria-live="polite"
+                      >
+                        {isCapsLockActive ? "⚠️ Caps Lock is active" : ""}
+                      </span>
+                      <span
+                        className={`font-medium ${
+                          confirmPassword
+                            ? registerPassword === confirmPassword
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-destructive"
+                            : ""
+                        }`}
+                        aria-live="polite"
+                      >
+                        {confirmPassword
+                          ? registerPassword === confirmPassword
                             ? "✓ Passwords match"
-                            : "✗ Passwords do not match"}
-                        </span>
-                      )}
+                            : "✗ Passwords do not match"
+                          : ""}
+                      </span>
                     </div>
                   </div>
                   <div className="relative">
