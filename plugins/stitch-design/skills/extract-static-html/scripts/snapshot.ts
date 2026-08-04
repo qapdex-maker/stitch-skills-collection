@@ -190,10 +190,17 @@ function ip6ToIpv4(ip6: string): string | null {
   return `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
 }
 
+// Cache for validated URLs to avoid parsing and checking them repeatedly (SSRF protection)
+const safeUrlCache = new Map<string, boolean>();
+
 export function isSafeUrl(urlStr: string): boolean {
+  if (safeUrlCache.has(urlStr)) {
+    return safeUrlCache.get(urlStr)!;
+  }
   try {
     const parsed = new URL(urlStr);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      safeUrlCache.set(urlStr, false);
       return false;
     }
 
@@ -240,11 +247,14 @@ export function isSafeUrl(urlStr: string): boolean {
       /^[0:]+$/.test(cleanHost) ||              // all-zero IPv6
       cleanHost === 'fd00:ec2::254'
     ) {
+      safeUrlCache.set(urlStr, false);
       return false;
     }
 
+    safeUrlCache.set(urlStr, true);
     return true;
   } catch {
+    safeUrlCache.set(urlStr, false);
     return false;
   }
 }
@@ -1535,6 +1545,8 @@ async function snapshot(opts: Opts): Promise<void> {
         // Browser may already be closed by timeout handler
       }
     }
+    // Clear global safe URL cache to avoid any memory retention or stale states in long-running processes
+    safeUrlCache.clear();
   }
 }
 
