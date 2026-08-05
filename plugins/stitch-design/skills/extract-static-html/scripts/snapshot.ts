@@ -190,10 +190,18 @@ function ip6ToIpv4(ip6: string): string | null {
   return `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
 }
 
+// In headless browser and URL scanning utilities, introducing a Map-based cache (safeUrlCache)
+// for SSRF URL validation checks (isSafeUrl) avoids redundant hostname resolution, parsing, and regex matches on identical resource targets.
+export const safeUrlCache = new Map<string, boolean>();
+
 export function isSafeUrl(urlStr: string): boolean {
+  if (safeUrlCache.has(urlStr)) {
+    return safeUrlCache.get(urlStr)!;
+  }
   try {
     const parsed = new URL(urlStr);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      safeUrlCache.set(urlStr, false);
       return false;
     }
 
@@ -209,6 +217,7 @@ export function isSafeUrl(urlStr: string): boolean {
       cleanHost === 'metadata' ||
       cleanHost === 'instance.metadata.azure.com'
     ) {
+      safeUrlCache.set(urlStr, false);
       return false;
     }
 
@@ -218,6 +227,7 @@ export function isSafeUrl(urlStr: string): boolean {
       ipToCheck === '192.0.0.192' ||
       ipToCheck === '168.63.129.16'
     ) {
+      safeUrlCache.set(urlStr, false);
       return false;
     }
 
@@ -226,6 +236,7 @@ export function isSafeUrl(urlStr: string): boolean {
     if (ipv4Match) {
       const [, a, b] = ipv4Match.map(Number);
       if (a === 169 && b === 254) {
+        safeUrlCache.set(urlStr, false);
         return false;
       }
     }
@@ -240,11 +251,14 @@ export function isSafeUrl(urlStr: string): boolean {
       /^[0:]+$/.test(cleanHost) ||              // all-zero IPv6
       cleanHost === 'fd00:ec2::254'
     ) {
+      safeUrlCache.set(urlStr, false);
       return false;
     }
 
+    safeUrlCache.set(urlStr, true);
     return true;
   } catch {
+    safeUrlCache.set(urlStr, false);
     return false;
   }
 }
@@ -1535,6 +1549,8 @@ async function snapshot(opts: Opts): Promise<void> {
         // Browser may already be closed by timeout handler
       }
     }
+    // Clear URL check cache to prevent memory leaks or stale entries between distinct scans
+    safeUrlCache.clear();
   }
 }
 
