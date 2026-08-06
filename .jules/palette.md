@@ -49,3 +49,7 @@
 ## 2026-11-29 - Persistent Live Containers and Truncated Node Accessibility
 **Learning:** Dynamic live message containers (e.g., Caps Lock indicators or password match reports) that conditionally mount/unmount tend to break screen reader tracking because assistive software may not watch dynamically injected root live regions. Keeping the `aria-live` containers persistently mounted in the DOM while conditionally outputting text solves this elegantly. Additionally, truncated links or names should include a native `title` attribute so hover and keyboard users can discover the un-truncated content.
 **Action:** Always render `aria-live="polite"` wrapper elements persistently in JSX, and attach standard HTML `title` attributes on truncated links.
+
+## 2026-11-30 - Spread Operator Sequence for Explicit Overrides
+**Learning:** When using components inside automated form libraries (like React Hook Form's `FormField`), spreading fields (`{...field}`) after custom properties (like `disabled={form.formState.isSubmitting}`) can lead to unexpected behavior if properties inside the spread object override the custom declarations. Positioning custom interactive properties strictly after the spread operator ensures they remain authoritative and are not accidentally overridden.
+**Action:** Always place `disabled={...}` and other custom attributes after the React Hook Form `{...field}` spread to ensure proper form state constraints.
