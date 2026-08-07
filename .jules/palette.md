@@ -49,3 +49,7 @@
 ## 2026-11-29 - Persistent Live Containers and Truncated Node Accessibility
 **Learning:** Dynamic live message containers (e.g., Caps Lock indicators or password match reports) that conditionally mount/unmount tend to break screen reader tracking because assistive software may not watch dynamically injected root live regions. Keeping the `aria-live` containers persistently mounted in the DOM while conditionally outputting text solves this elegantly. Additionally, truncated links or names should include a native `title` attribute so hover and keyboard users can discover the un-truncated content.
 **Action:** Always render `aria-live="polite"` wrapper elements persistently in JSX, and attach standard HTML `title` attributes on truncated links.
+
+## 2026-11-30 - Disabling Form Fields Mid-Flight for Submissions
+**Learning:** During asynchronous form submissions, interactive inputs, select triggers, and textareas can still be manipulated by users unless they are explicitly disabled using the form's active submission state (e.g., `formState.isSubmitting`). This prevents data drift, race conditions, and mid-flight state discrepancy. When integrating with libraries like React Hook Form, the `disabled` property must always be declared after any spread attributes (such as `{...field}`) to prevent standard field properties from overriding the disabled state.
+**Action:** Always include `disabled={form.formState.isSubmitting}` after the field spread operator `{...field}` on all text inputs, selects, and textareas in React forms.
