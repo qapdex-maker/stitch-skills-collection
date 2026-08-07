@@ -190,7 +190,12 @@ function ip6ToIpv4(ip6: string): string | null {
   return `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
 }
 
-export function isSafeUrl(urlStr: string): boolean {
+// In headless browser and URL scanning utilities, introducing a Map-based cache (safeUrlCache)
+// for SSRF URL validation checks (isSafeUrl) avoids redundant hostname resolution, parsing,
+// and regex matches on identical resource targets.
+const safeUrlCache = new Map<string, boolean>();
+
+function uncachedIsSafeUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -247,6 +252,16 @@ export function isSafeUrl(urlStr: string): boolean {
   } catch {
     return false;
   }
+}
+
+export function isSafeUrl(urlStr: string): boolean {
+  let cached = safeUrlCache.get(urlStr);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const result = uncachedIsSafeUrl(urlStr);
+  safeUrlCache.set(urlStr, result);
+  return result;
 }
 
 /**
@@ -1526,6 +1541,9 @@ async function snapshot(opts: Opts): Promise<void> {
       console.log(JSON.stringify(stats, null, 2));
     }
   } finally {
+    // Clear the safe URL cache inside the orchestration runner's finally block to avoid
+    // memory leaks or state corruption between distinct tasks.
+    safeUrlCache.clear();
     // Guaranteed browser cleanup — prevents zombie Chrome processes
     if (globalTimer) clearTimeout(globalTimer);
     if (browser) {
