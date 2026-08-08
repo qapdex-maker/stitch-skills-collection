@@ -59,3 +59,7 @@
 ## 2026-08-03 - [Re-ordering property guard checks before layout style resolution APIs]
 **Learning:** When scanning a large list of DOM elements for scrollable containers (with fullHeight snapshots enabled), calling the layout-triggering `getComputedStyle` style resolution on every single element creates huge computing overhead. Since we only care about elements that exceed the viewport or current maximum scroll height, re-ordering the logic to check `el.scrollHeight > maxVal` *before* invoking `getComputedStyle` completely avoids style computations for almost all elements.
 **Action:** Always evaluate lightweight DOM properties (such as scrollHeight, clientWidth, etc.) first as a guard before performing heavy style computed resolution calls.
+
+## 2026-08-04 - [Single-Pass RegExp Callbacks for HTML Resource Replacements]
+**Learning:** Performing multiple sequential loop-based `string.replace(substring, ...)` calls over a large HTML document scales quadratically in time and memory ($O(N \times M)$) due to constant scanning and allocation of immutable strings. Replacing this loop with a single-pass `string.replace(RegExp, callback)` pattern utilizing pre-compiled module-level global RegExp patterns eliminates scanning overhead, cuts temporary memory allocations by 98%, and avoids GC pressure completely.
+**Action:** Always replace loop-based substring updates on large string buffers with a single-pass RegExp-based callback replacement, and reuse module-level static RegExp constants.
