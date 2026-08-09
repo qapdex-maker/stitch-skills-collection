@@ -59,3 +59,7 @@
 ## 2026-08-03 - [Re-ordering property guard checks before layout style resolution APIs]
 **Learning:** When scanning a large list of DOM elements for scrollable containers (with fullHeight snapshots enabled), calling the layout-triggering `getComputedStyle` style resolution on every single element creates huge computing overhead. Since we only care about elements that exceed the viewport or current maximum scroll height, re-ordering the logic to check `el.scrollHeight > maxVal` *before* invoking `getComputedStyle` completely avoids style computations for almost all elements.
 **Action:** Always evaluate lightweight DOM properties (such as scrollHeight, clientWidth, etc.) first as a guard before performing heavy style computed resolution calls.
+
+## 2026-08-04 - [Optimizing AST walk by early-exiting on leaf node types]
+**Learning:** AST trees are dense with terminal/leaf node structures such as Identifiers, Literals, and raw text nodes. Walking these leaf nodes recursively with `Object.keys()` is highly redundant and leads to substantial GC pressure and prototype search overhead. Guarding the recursive walk function with a pre-defined static Set of leaf node types (e.g. `Identifier`, `JSXIdentifier`, etc.) and returning immediately avoids allocating key arrays and bypasses any loop setup overhead entirely.
+**Action:** Identify and pre-define terminal leaf node structures in complex nested tree traversals, executing early returns on these node types to avoid the expensive allocation of property arrays via `Object.keys()` and child-iteration loops.
