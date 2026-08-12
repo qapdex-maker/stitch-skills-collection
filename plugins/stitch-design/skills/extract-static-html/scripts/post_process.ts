@@ -51,6 +51,9 @@ const ATTR_REGEX_MAP: Record<string, RegExp> = {
   data: /data="((?!https?:\/\/|data:|\/\/)[^"]+)"/g,
 };
 
+// Bolt optimization: Pre-compiled case-insensitive regex for fast non-local URL path checks
+const NOT_LOCAL_PATH_REGEX = /^(https?:|data:|\/\/)/i;
+
 function getMime(filePath: string): string {
   return MIME_MAP[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
 }
@@ -372,13 +375,9 @@ function readFileAtomic(
  * Check if a path is a local (non-remote, non-data) reference.
  */
 function isLocalPath(url: string): boolean {
-  return (
-    !!url &&
-    !url.startsWith('http://') &&
-    !url.startsWith('https://') &&
-    !url.startsWith('data:') &&
-    !url.startsWith('//')
-  );
+  // Bolt optimization: use single pre-compiled case-insensitive regex test instead of 4 separate startsWith calls.
+  // This is also more robust as it covers case-insensitive protocol variations (like HTTP://).
+  return !!url && !NOT_LOCAL_PATH_REGEX.test(url);
 }
 
 // ---------------------------------------------------------------------------
