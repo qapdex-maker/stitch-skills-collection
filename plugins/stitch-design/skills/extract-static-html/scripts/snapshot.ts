@@ -1549,6 +1549,8 @@ async function snapshot(opts: Opts): Promise<void> {
         // Browser may already be closed by timeout handler
       }
     }
+    // Clear URL check cache to prevent memory leaks or stale entries between distinct scans
+    safeUrlCache.clear();
   }
 }
 

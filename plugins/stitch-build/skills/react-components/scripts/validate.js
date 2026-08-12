@@ -20,6 +20,19 @@ import path from 'node:path';
 
 const HEX_COLOR_REGEX = /#[0-9A-Fa-f]{6}/;
 
+// Bolt optimization: Pre-define a Set of leaf node types that never contain child AST nodes
+// to completely bypass Object.keys() allocation and key iteration overhead on these nodes.
+const LEAF_NODE_TYPES = new Set([
+  'Identifier',
+  'JSXIdentifier',
+  'StringLiteral',
+  'NumericLiteral',
+  'BooleanLiteral',
+  'NullLiteral',
+  'RegExpLiteral',
+  'JSXText'
+]);
+
 async function validateComponent(filePath) {
   const code = fs.readFileSync(filePath, 'utf-8');
   const filename = path.basename(filePath);
@@ -43,6 +56,11 @@ async function validateComponent(filePath) {
       }
 
       const type = node.type;
+      // Bolt optimization: Early return for leaf node types to bypass Object.keys() allocations and walking overhead
+      if (LEAF_NODE_TYPES.has(type)) {
+        return;
+      }
+
       if (type === 'TsInterfaceDeclaration' && node.id?.value?.endsWith('Props')) {
         hasInterface = true;
       } else if (type === 'JSXAttribute') {

@@ -59,3 +59,7 @@
 ## 2026-08-03 - [Re-ordering property guard checks before layout style resolution APIs]
 **Learning:** When scanning a large list of DOM elements for scrollable containers (with fullHeight snapshots enabled), calling the layout-triggering `getComputedStyle` style resolution on every single element creates huge computing overhead. Since we only care about elements that exceed the viewport or current maximum scroll height, re-ordering the logic to check `el.scrollHeight > maxVal` *before* invoking `getComputedStyle` completely avoids style computations for almost all elements.
 **Action:** Always evaluate lightweight DOM properties (such as scrollHeight, clientWidth, etc.) first as a guard before performing heavy style computed resolution calls.
+
+## 2026-08-04 - [Caching deterministic static input checks to avoid complex parsing and matching overhead]
+**Learning:** In headless browser scraping and URL snapshotting, URLs are frequently parsed, cleanups applied, and various complex hostname patterns/IP blacklists are checked. Since these checks are static and fully deterministic, introducing a Map-based cache (`safeUrlCache`) for `isSafeUrl` validations avoids redundant operations, matching, and parsing on identical targets.
+**Action:** Cache the results of deterministic validation checks in a Map-based lookup, and ensure cache is cleared via `finally` in the orchestration runner block to prevent memory growth or state leakage between runs.

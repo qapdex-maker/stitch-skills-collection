@@ -34,6 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import type { Node } from '@babel/types';
 
 // ---------------------------------------------------------------------------
@@ -151,15 +152,63 @@ Options:
 // ---------------------------------------------------------------------------
 // Input validation
 // ---------------------------------------------------------------------------
+/**
+ * Validate that the destination page file path is safe and resides strictly
+ * within the output directory (CWE-22 / SSRF / Path Traversal protection).
+ * Resolves symlinks/junctions to check the canonical physical path.
+ */
+export function isSafeDstPath(dstName: string, outdir: string): boolean {
+  try {
+    const resolvedOutdir = path.resolve(outdir);
+    let canonicalOutdir = resolvedOutdir;
+    try {
+      if (fs.existsSync(resolvedOutdir)) {
+        canonicalOutdir = fs.realpathSync(resolvedOutdir);
+      }
+    } catch {
+      // Fallback if realpathSync fails
+    }
+
+    // Normalize backslashes to forward slashes for cross-platform safety
+    const normalizedDstName = dstName.replace(/\\/g, '/');
+    const dst = path.join(outdir, normalizedDstName);
+    const resolvedDst = path.resolve(dst);
+
+    let canonicalDst = resolvedDst;
+    try {
+      if (fs.existsSync(resolvedDst)) {
+        canonicalDst = fs.realpathSync(resolvedDst);
+      } else {
+        const parentDir = path.dirname(resolvedDst);
+        if (fs.existsSync(parentDir)) {
+          canonicalDst = path.join(fs.realpathSync(parentDir), path.basename(resolvedDst));
+        }
+      }
+    } catch {
+      // Fallback if realpathSync fails
+    }
+
+    let normDst = canonicalDst;
+    let normOutdir = canonicalOutdir;
+
+    if (process.platform === 'win32') {
+      normDst = normDst.toLowerCase();
+      normOutdir = normOutdir.toLowerCase();
+    }
+
+    const safePrefix = normOutdir.endsWith(path.sep) ? normOutdir : normOutdir + path.sep;
+    return normDst === normOutdir || normDst.startsWith(safePrefix);
+  } catch {
+    return false;
+  }
+}
+
 function validateOpts(opts: Opts): void {
   const errors: string[] = [];
 
   if (opts.pages.length === 0) {
     errors.push('No pages specified. Use --page src:dst:title');
   }
-
-  const resolvedOutdir = path.resolve(opts.outdir);
-  const safePrefix = resolvedOutdir.endsWith(path.sep) ? resolvedOutdir : resolvedOutdir + path.sep;
 
   for (const spec of opts.pages) {
     const parts = spec.split(':');
@@ -172,11 +221,7 @@ function validateOpts(opts: Opts): void {
       }
 
       // Security: prevent path traversal out of the designated output directory (CWE-22)
-      // Normalize backslashes to forward slashes for cross-platform safety
-      const normalizedDstName = dstName.replace(/\\/g, '/');
-      const dst = path.join(opts.outdir, normalizedDstName);
-      const resolvedDst = path.resolve(dst);
-      if (resolvedDst !== resolvedOutdir && !resolvedDst.startsWith(safePrefix)) {
+      if (!isSafeDstPath(dstName, opts.outdir)) {
         errors.push(`Security Error: Destination path '${dstName}' escapes output directory '${opts.outdir}'`);
       }
     }
@@ -635,13 +680,18 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
   // Now perform safe replacements sequentially, re-extracting dynamic references
   // (like CSS URL refs whose start/end indices shift) to avoid HTML/CSS corruption.
 
-  // 1. Replace src matches (cache is fully warm — synchronous lookups)
-  for (const m of srcImageMatches) {
-    const encoded = imgCache.get(m[1]);
-    if (encoded && encoded !== m[1]) {
-      html = html.replace(m[0], `src="${encoded}"`);
+  // 1. Replace src matches (cache is fully warm — synchronous lookups) using single-pass replacement
+  // Bolt optimization: A single-pass RegExp-based replace callback avoids quadratic string copying
+  // and multiple document-wide scans, reducing memory allocation and CPU overhead significantly.
+  html = html.replace(SRC_URL_REGEX, (match, url) => {
+    if (isImageUrl(url)) {
+      const encoded = imgCache.get(url);
+      if (encoded && encoded !== url) {
+        return `src="${encoded}"`;
+      }
     }
-  }
+    return match;
+  });
 
   // 2. Re-extract and replace CSS url() references on the mutated HTML
   const currentCssUrlRefs = extractCssUrls(html);
@@ -662,15 +712,16 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
     html = replaceCssUrlsInText(html, replacements);
   }
 
-  // 3. Replace video poster matches on the final mutated HTML
-  // Re-extracting poster matches ensures correct matches even if HTML has shifted
-  const currentPosterMatches = [...html.matchAll(/poster="(https?:\/\/[^"]+)"/g)];
-  for (const m of currentPosterMatches) {
-    const encoded = imgCache.get(m[1]);
-    if (encoded && encoded !== m[1]) {
-      html = html.replace(m[0], `poster="${encoded}"`);
+  // 3. Replace video poster matches on the final mutated HTML using single-pass replacement
+  // Bolt optimization: A single-pass RegExp-based replace callback completely avoids re-extracting
+  // poster matches with matchAll, eliminating regex compilation and intermediate string allocations.
+  html = html.replace(POSTER_URL_REGEX, (match, url) => {
+    const encoded = imgCache.get(url);
+    if (encoded && encoded !== url) {
+      return `poster="${encoded}"`;
     }
-  }
+    return match;
+  });
 
   return html;
 }
@@ -1166,8 +1217,20 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err: Error) => {
-  console.error('❌ Error:', err.message);
-  if (err.stack) console.error(err.stack);
-  process.exit(1);
-});
+const isMain = (() => {
+  try {
+    const nodePath = fs.realpathSync(process.argv[1]);
+    const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url));
+    return nodePath === scriptPath;
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
+  main().catch((err: Error) => {
+    console.error('❌ Error:', err.message);
+    if (err.stack) console.error(err.stack);
+    process.exit(1);
+  });
+}
