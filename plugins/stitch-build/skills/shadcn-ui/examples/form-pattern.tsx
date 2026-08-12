@@ -90,7 +90,12 @@ export function UserProfileForm() {
                 </span>
               </FormLabel>
               <FormControl>
-                <Input placeholder="johndoe" autoComplete="username" {...field} disabled={form.formState.isSubmitting} />
+                <Input
+                  placeholder="johndoe"
+                  autoComplete="username"
+                  {...field}
+                  disabled={form.formState.isSubmitting}
+                />
               </FormControl>
               <FormDescription>
                 This is your public display name.
@@ -112,7 +117,13 @@ export function UserProfileForm() {
                 </span>
               </FormLabel>
               <FormControl>
-                <Input type="email" placeholder="john@example.com" autoComplete="email" {...field} disabled={form.formState.isSubmitting} />
+                <Input
+                  type="email"
+                  placeholder="john@example.com"
+                  autoComplete="email"
+                  {...field}
+                  disabled={form.formState.isSubmitting}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -130,7 +141,11 @@ export function UserProfileForm() {
                   *
                 </span>
               </FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={form.formState.isSubmitting}>
+              <Select
+                onValueChange={field.onChange}
+                defaultValue={field.value}
+                disabled={form.formState.isSubmitting}
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a role" />
