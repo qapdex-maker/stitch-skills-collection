@@ -190,77 +190,74 @@ function ip6ToIpv4(ip6: string): string | null {
   return `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
 }
 
-// In headless browser and URL scanning utilities, introducing a Map-based cache (safeUrlCache)
-// for SSRF URL validation checks (isSafeUrl) avoids redundant hostname resolution, parsing, and regex matches on identical resource targets.
-export const safeUrlCache = new Map<string, boolean>();
+const safeUrlCache = new Map<string, boolean>();
 
 export function isSafeUrl(urlStr: string): boolean {
   if (safeUrlCache.has(urlStr)) {
     return safeUrlCache.get(urlStr)!;
   }
-  try {
-    const parsed = new URL(urlStr);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      safeUrlCache.set(urlStr, false);
-      return false;
-    }
 
-    const hostname = parsed.hostname.toLowerCase();
-    const mappedIpv4 = ip6ToIpv4(hostname);
-    const ipToCheck = mappedIpv4 || hostname;
-
-    const cleanHost = hostname.replace(/^\[|\]$/g, '');
-
-    // Block standard cloud metadata DNS names (SSRF protection)
-    if (
-      cleanHost === 'metadata.google.internal' ||
-      cleanHost === 'metadata' ||
-      cleanHost === 'instance.metadata.azure.com'
-    ) {
-      safeUrlCache.set(urlStr, false);
-      return false;
-    }
-
-    // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
-    if (
-      ipToCheck === '100.100.100.200' ||
-      ipToCheck === '192.0.0.192' ||
-      ipToCheck === '168.63.129.16'
-    ) {
-      safeUrlCache.set(urlStr, false);
-      return false;
-    }
-
-    // Block private/untrusted link-local IPv4 ranges (169.254.0.0/16)
-    const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    if (ipv4Match) {
-      const [, a, b] = ipv4Match.map(Number);
-      if (a === 169 && b === 254) {
-        safeUrlCache.set(urlStr, false);
+  const result = (() => {
+    try {
+      const parsed = new URL(urlStr);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         return false;
       }
-    }
 
-    // Block IPv6 link-local addresses (fe80::/10), AWS IPv6 metadata, Unique Local Addresses (fc00::/7),
-    // multicast (ff00::/8), and unspecified/all-zero (::) IPv6 addresses
-    if (
-      /^fe[89ab][0-9a-f]:/i.test(cleanHost) ||
-      /^f[cd][0-9a-f]{2}:/i.test(cleanHost) || // fc00::/7 (unique local address)
-      /^ff[0-9a-f]{2}:/i.test(cleanHost) ||    // ff00::/8 (multicast)
-      cleanHost === '::' ||
-      /^[0:]+$/.test(cleanHost) ||              // all-zero IPv6
-      cleanHost === 'fd00:ec2::254'
-    ) {
-      safeUrlCache.set(urlStr, false);
+      const hostname = parsed.hostname.toLowerCase();
+      const mappedIpv4 = ip6ToIpv4(hostname);
+      const ipToCheck = mappedIpv4 || hostname;
+
+      const cleanHost = hostname.replace(/^\[|\]$/g, '');
+
+      // Block standard cloud metadata DNS names (SSRF protection)
+      if (
+        cleanHost === 'metadata.google.internal' ||
+        cleanHost === 'metadata' ||
+        cleanHost === 'instance.metadata.azure.com'
+      ) {
+        return false;
+      }
+
+      // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
+      if (
+        ipToCheck === '100.100.100.200' ||
+        ipToCheck === '192.0.0.192' ||
+        ipToCheck === '168.63.129.16'
+      ) {
+        return false;
+      }
+
+      // Block private/untrusted link-local IPv4 ranges (169.254.0.0/16)
+      const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+      if (ipv4Match) {
+        const [, a, b] = ipv4Match.map(Number);
+        if (a === 169 && b === 254) {
+          return false;
+        }
+      }
+
+      // Block IPv6 link-local addresses (fe80::/10), AWS IPv6 metadata, Unique Local Addresses (fc00::/7),
+      // multicast (ff00::/8), and unspecified/all-zero (::) IPv6 addresses
+      if (
+        /^fe[89ab][0-9a-f]:/i.test(cleanHost) ||
+        /^f[cd][0-9a-f]{2}:/i.test(cleanHost) || // fc00::/7 (unique local address)
+        /^ff[0-9a-f]{2}:/i.test(cleanHost) ||    // ff00::/8 (multicast)
+        cleanHost === '::' ||
+        /^[0:]+$/.test(cleanHost) ||              // all-zero IPv6
+        cleanHost === 'fd00:ec2::254'
+      ) {
+        return false;
+      }
+
+      return true;
+    } catch {
       return false;
     }
+  })();
 
-    safeUrlCache.set(urlStr, true);
-    return true;
-  } catch {
-    safeUrlCache.set(urlStr, false);
-    return false;
-  }
+  safeUrlCache.set(urlStr, result);
+  return result;
 }
 
 /**
@@ -1540,6 +1537,9 @@ async function snapshot(opts: Opts): Promise<void> {
       console.log(JSON.stringify(stats, null, 2));
     }
   } finally {
+    // Clear safe URL cache
+    safeUrlCache.clear();
+
     // Guaranteed browser cleanup — prevents zombie Chrome processes
     if (globalTimer) clearTimeout(globalTimer);
     if (browser) {
