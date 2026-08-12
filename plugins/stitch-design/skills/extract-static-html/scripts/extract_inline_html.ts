@@ -668,8 +668,9 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
   // Now perform safe replacements sequentially, re-extracting dynamic references
   // (like CSS URL refs whose start/end indices shift) to avoid HTML/CSS corruption.
 
-  // 1. Replace src matches (cache is fully warm — synchronous lookups) using a single-pass regex replacement
-  // to avoid quadratic time complexity and heavy garbage collection overhead of iterative replacements.
+  // 1. Replace src matches (cache is fully warm — synchronous lookups) using single-pass replacement
+  // Bolt optimization: A single-pass RegExp-based replace callback avoids quadratic string copying
+  // and multiple document-wide scans, reducing memory allocation and CPU overhead significantly.
   html = html.replace(SRC_URL_REGEX, (match, url) => {
     if (isImageUrl(url)) {
       const encoded = imgCache.get(url);
@@ -699,8 +700,9 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
     html = replaceCssUrlsInText(html, replacements);
   }
 
-  // 3. Replace video poster matches on the final mutated HTML using a single-pass regex replacement
-  // to avoid quadratic time complexity and heavy garbage collection overhead of iterative replacements.
+  // 3. Replace video poster matches on the final mutated HTML using single-pass replacement
+  // Bolt optimization: A single-pass RegExp-based replace callback completely avoids re-extracting
+  // poster matches with matchAll, eliminating regex compilation and intermediate string allocations.
   html = html.replace(POSTER_URL_REGEX, (match, url) => {
     const encoded = imgCache.get(url);
     if (encoded && encoded !== url) {
