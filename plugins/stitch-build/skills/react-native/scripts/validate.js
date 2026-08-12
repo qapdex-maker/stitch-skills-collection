@@ -24,6 +24,18 @@ const HTML_ELEMENTS = ['div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', '
 // Bolt optimization: Pre-compile HTML_ELEMENTS into a Set for O(1) checks instead of O(N) Array.includes loop
 const HTML_ELEMENTS_SET = new Set(HTML_ELEMENTS);
 
+// Bolt optimization: Pre-define a Set of leaf node types that never contain child AST nodes
+// to completely bypass Object.keys() allocation and key iteration overhead on these nodes.
+const LEAF_NODE_TYPES = new Set([
+  'Identifier',
+  'JSXIdentifier',
+  'NumericLiteral',
+  'BooleanLiteral',
+  'NullLiteral',
+  'RegExpLiteral',
+  'JSXText'
+]);
+
 async function validateComponent(filePath) {
   const code = fs.readFileSync(filePath, 'utf-8');
   const filename = path.basename(filePath);
@@ -50,15 +62,24 @@ async function validateComponent(filePath) {
 
       const type = node.type;
       if (type) {
+        // Bolt optimization: Check and process StringLiteral before early-exiting on other leaf nodes
+        if (type === 'StringLiteral') {
+          const val = node.value;
+          if (HEX_COLOR_REGEX.test(val) || RGBA_COLOR_REGEX.test(val)) {
+            colorIssues.push(val);
+          }
+          return; // Skip walking properties of StringLiteral leaf node
+        }
+
+        // Bolt optimization: Early return for other leaf node types to bypass Object.keys() allocations and walking overhead
+        if (LEAF_NODE_TYPES.has(type)) {
+          return;
+        }
+
         if (type === 'TsInterfaceDeclaration' && node.id?.value?.endsWith('Props')) {
           hasInterface = true;
           if (parent?.type === 'ExportDeclaration') {
             hasExportedInterface = true;
-          }
-        } else if (type === 'StringLiteral') {
-          const val = node.value;
-          if (HEX_COLOR_REGEX.test(val) || RGBA_COLOR_REGEX.test(val)) {
-            colorIssues.push(val);
           }
         } else if (type === 'JSXOpeningElement' && node.name?.type === 'Identifier') {
           const tagName = node.name.value;
