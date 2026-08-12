@@ -34,6 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import type { Node } from '@babel/types';
 
 // ---------------------------------------------------------------------------
@@ -151,15 +152,63 @@ Options:
 // ---------------------------------------------------------------------------
 // Input validation
 // ---------------------------------------------------------------------------
+/**
+ * Validate that the destination page file path is safe and resides strictly
+ * within the output directory (CWE-22 / SSRF / Path Traversal protection).
+ * Resolves symlinks/junctions to check the canonical physical path.
+ */
+export function isSafeDstPath(dstName: string, outdir: string): boolean {
+  try {
+    const resolvedOutdir = path.resolve(outdir);
+    let canonicalOutdir = resolvedOutdir;
+    try {
+      if (fs.existsSync(resolvedOutdir)) {
+        canonicalOutdir = fs.realpathSync(resolvedOutdir);
+      }
+    } catch {
+      // Fallback if realpathSync fails
+    }
+
+    // Normalize backslashes to forward slashes for cross-platform safety
+    const normalizedDstName = dstName.replace(/\\/g, '/');
+    const dst = path.join(outdir, normalizedDstName);
+    const resolvedDst = path.resolve(dst);
+
+    let canonicalDst = resolvedDst;
+    try {
+      if (fs.existsSync(resolvedDst)) {
+        canonicalDst = fs.realpathSync(resolvedDst);
+      } else {
+        const parentDir = path.dirname(resolvedDst);
+        if (fs.existsSync(parentDir)) {
+          canonicalDst = path.join(fs.realpathSync(parentDir), path.basename(resolvedDst));
+        }
+      }
+    } catch {
+      // Fallback if realpathSync fails
+    }
+
+    let normDst = canonicalDst;
+    let normOutdir = canonicalOutdir;
+
+    if (process.platform === 'win32') {
+      normDst = normDst.toLowerCase();
+      normOutdir = normOutdir.toLowerCase();
+    }
+
+    const safePrefix = normOutdir.endsWith(path.sep) ? normOutdir : normOutdir + path.sep;
+    return normDst === normOutdir || normDst.startsWith(safePrefix);
+  } catch {
+    return false;
+  }
+}
+
 function validateOpts(opts: Opts): void {
   const errors: string[] = [];
 
   if (opts.pages.length === 0) {
     errors.push('No pages specified. Use --page src:dst:title');
   }
-
-  const resolvedOutdir = path.resolve(opts.outdir);
-  const safePrefix = resolvedOutdir.endsWith(path.sep) ? resolvedOutdir : resolvedOutdir + path.sep;
 
   for (const spec of opts.pages) {
     const parts = spec.split(':');
@@ -172,11 +221,7 @@ function validateOpts(opts: Opts): void {
       }
 
       // Security: prevent path traversal out of the designated output directory (CWE-22)
-      // Normalize backslashes to forward slashes for cross-platform safety
-      const normalizedDstName = dstName.replace(/\\/g, '/');
-      const dst = path.join(opts.outdir, normalizedDstName);
-      const resolvedDst = path.resolve(dst);
-      if (resolvedDst !== resolvedOutdir && !resolvedDst.startsWith(safePrefix)) {
+      if (!isSafeDstPath(dstName, opts.outdir)) {
         errors.push(`Security Error: Destination path '${dstName}' escapes output directory '${opts.outdir}'`);
       }
     }
@@ -286,69 +331,81 @@ function ip6ToIpv4(ip6: string): string | null {
  * URLs parsed from HTML files could be attacker-controlled, so we must
  * ensure they only target public internet hosts.
  */
+const safeUrlCache = new Map<string, boolean>();
+
 export function isSafeUrl(parsed: URL): boolean {
-  // Only allow http and https protocols
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return false;
+  const cacheKey = parsed.href;
+  if (safeUrlCache.has(cacheKey)) {
+    return safeUrlCache.get(cacheKey)!;
   }
 
-  const hostname = parsed.hostname.toLowerCase();
-  const mappedIpv4 = ip6ToIpv4(hostname);
-  const ipToCheck = mappedIpv4 || hostname;
+  const result = (() => {
+    // Only allow http and https protocols
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
 
-  const cleanHost = hostname.replace(/^\[|\]$/g, '');
+    const hostname = parsed.hostname.toLowerCase();
+    const mappedIpv4 = ip6ToIpv4(hostname);
+    const ipToCheck = mappedIpv4 || hostname;
 
-  // Block standard cloud metadata DNS names (SSRF protection)
-  if (
-    cleanHost === 'metadata.google.internal' ||
-    cleanHost === 'metadata' ||
-    cleanHost === 'instance.metadata.azure.com'
-  ) {
-    return false;
-  }
+    const cleanHost = hostname.replace(/^\[|\]$/g, '');
 
-  // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
-  if (
-    ipToCheck === '100.100.100.200' ||
-    ipToCheck === '192.0.0.192' ||
-    ipToCheck === '168.63.129.16'
-  ) {
-    return false;
-  }
-
-  // Block localhost, loopback, link-local, unique local, multicast, and unspecified/all-zero IPv6 addresses
-  if (
-    cleanHost === 'localhost' ||
-    cleanHost === '::1' ||
-    cleanHost === '::' ||
-    /^[0:]+$/.test(cleanHost) ||        // all-zero IPv6
-    /^fe[89ab][0-9a-f]:/i.test(cleanHost) || // fe80::/10 (link-local)
-    /^f[cd][0-9a-f]{2}:/i.test(cleanHost) || // fc00::/7 (unique local address)
-    /^ff[0-9a-f]{2}:/i.test(cleanHost)  // ff00::/8 (multicast)
-  ) {
-    return false;
-  }
-
-  // Block private/reserved/untrusted IPv4 ranges
-  const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4Match) {
-    const [, a, b] = ipv4Match.map(Number);
+    // Block standard cloud metadata DNS names (SSRF protection)
     if (
-      a === 127 ||          // 127.0.0.0/8  (loopback)
-      a === 10 ||           // 10.0.0.0/8   (private)
-      a === 0 ||            // 0.0.0.0/8    (unspecified)
-      (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12 (private)
-      (a === 192 && b === 168) ||          // 192.168.0.0/16 (private)
-      (a === 169 && b === 254) ||          // 169.254.0.0/16 (link-local)
-      (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 (Carrier-Grade NAT)
-      (a === 198 && b >= 18 && b <= 19) || // 198.18.0.0/15 (Benchmark testing)
-      a >= 224             // 224.0.0.0/4 (Multicast/Reserved/Class E)
+      cleanHost === 'metadata.google.internal' ||
+      cleanHost === 'metadata' ||
+      cleanHost === 'instance.metadata.azure.com'
     ) {
       return false;
     }
-  }
 
-  return true;
+    // Block Alibaba Cloud IMDS metadata IP (100.100.100.200), Oracle Cloud (192.0.0.192), and Azure Virtual IP (168.63.129.16)
+    if (
+      ipToCheck === '100.100.100.200' ||
+      ipToCheck === '192.0.0.192' ||
+      ipToCheck === '168.63.129.16'
+    ) {
+      return false;
+    }
+
+    // Block localhost, loopback, link-local, unique local, multicast, and unspecified/all-zero IPv6 addresses
+    if (
+      cleanHost === 'localhost' ||
+      cleanHost === '::1' ||
+      cleanHost === '::' ||
+      /^[0:]+$/.test(cleanHost) ||        // all-zero IPv6
+      /^fe[89ab][0-9a-f]:/i.test(cleanHost) || // fe80::/10 (link-local)
+      /^f[cd][0-9a-f]{2}:/i.test(cleanHost) || // fc00::/7 (unique local address)
+      /^ff[0-9a-f]{2}:/i.test(cleanHost)  // ff00::/8 (multicast)
+    ) {
+      return false;
+    }
+
+    // Block private/reserved/untrusted IPv4 ranges
+    const ipv4Match = ipToCheck.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4Match) {
+      const [, a, b] = ipv4Match.map(Number);
+      if (
+        a === 127 ||          // 127.0.0.0/8  (loopback)
+        a === 10 ||           // 10.0.0.0/8   (private)
+        a === 0 ||            // 0.0.0.0/8    (unspecified)
+        (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12 (private)
+        (a === 192 && b === 168) ||          // 192.168.0.0/16 (private)
+        (a === 169 && b === 254) ||          // 169.254.0.0/16 (link-local)
+        (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 (Carrier-Grade NAT)
+        (a === 198 && b >= 18 && b <= 19) || // 198.18.0.0/15 (Benchmark testing)
+        a >= 224             // 224.0.0.0/4 (Multicast/Reserved/Class E)
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  })();
+
+  safeUrlCache.set(cacheKey, result);
+  return result;
 }
 
 // Intentional outbound requests: this function fetches remote images
@@ -623,13 +680,18 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
   // Now perform safe replacements sequentially, re-extracting dynamic references
   // (like CSS URL refs whose start/end indices shift) to avoid HTML/CSS corruption.
 
-  // 1. Replace src matches (cache is fully warm — synchronous lookups)
-  for (const m of srcImageMatches) {
-    const encoded = imgCache.get(m[1]);
-    if (encoded && encoded !== m[1]) {
-      html = html.replace(m[0], `src="${encoded}"`);
+  // 1. Replace src matches (cache is fully warm — synchronous lookups) using single-pass replacement
+  // Bolt optimization: A single-pass RegExp-based replace callback avoids quadratic string copying
+  // and multiple document-wide scans, reducing memory allocation and CPU overhead significantly.
+  html = html.replace(SRC_URL_REGEX, (match, url) => {
+    if (isImageUrl(url)) {
+      const encoded = imgCache.get(url);
+      if (encoded && encoded !== url) {
+        return `src="${encoded}"`;
+      }
     }
-  }
+    return match;
+  });
 
   // 2. Re-extract and replace CSS url() references on the mutated HTML
   const currentCssUrlRefs = extractCssUrls(html);
@@ -650,15 +712,16 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
     html = replaceCssUrlsInText(html, replacements);
   }
 
-  // 3. Replace video poster matches on the final mutated HTML
-  // Re-extracting poster matches ensures correct matches even if HTML has shifted
-  const currentPosterMatches = [...html.matchAll(/poster="(https?:\/\/[^"]+)"/g)];
-  for (const m of currentPosterMatches) {
-    const encoded = imgCache.get(m[1]);
-    if (encoded && encoded !== m[1]) {
-      html = html.replace(m[0], `poster="${encoded}"`);
+  // 3. Replace video poster matches on the final mutated HTML using single-pass replacement
+  // Bolt optimization: A single-pass RegExp-based replace callback completely avoids re-extracting
+  // poster matches with matchAll, eliminating regex compilation and intermediate string allocations.
+  html = html.replace(POSTER_URL_REGEX, (match, url) => {
+    const encoded = imgCache.get(url);
+    if (encoded && encoded !== url) {
+      return `poster="${encoded}"`;
     }
-  }
+    return match;
+  });
 
   return html;
 }
@@ -1084,75 +1147,92 @@ async function main(): Promise<void> {
     warnings: [],
   };
 
-  fs.mkdirSync(opts.outdir, { recursive: true });
+  try {
+    fs.mkdirSync(opts.outdir, { recursive: true });
 
-  for (const spec of opts.pages) {
-    const parts = spec.split(':');
-    const [src, dstName, title] = parts;
-    const dst = path.join(opts.outdir, dstName);
+    for (const spec of opts.pages) {
+      const parts = spec.split(':');
+      const [src, dstName, title] = parts;
+      const dst = path.join(opts.outdir, dstName);
 
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`Converting ${src} -> ${dstName}...`);
-    console.log(`${'='.repeat(60)}`);
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`Converting ${src} -> ${dstName}...`);
+      console.log(`${'='.repeat(60)}`);
 
-    const jsx = fs.readFileSync(src, 'utf-8');
-    let body = jsxToHtml(jsx);
+      const jsx = fs.readFileSync(src, 'utf-8');
+      let body = jsxToHtml(jsx);
 
-    if (!body) {
-      const msg = `Failed to parse JSX from ${src}`;
-      console.error(`  ${msg}`);
-      stats.warnings.push(msg);
-      continue;
+      if (!body) {
+        const msg = `Failed to parse JSX from ${src}`;
+        console.error(`  ${msg}`);
+        stats.warnings.push(msg);
+        continue;
+      }
+
+      // Apply exclude pattern (pre-validated during argument parsing)
+      if (opts.excludePattern) {
+        body = body.replace(opts.excludePattern, '');
+      }
+
+      // Extract body class from outer wrapper div
+      const outerMatch = body.match(/^<div\s+class="([^"]*)"[^>]*>([\s\S]*)<\/div>$/);
+      let fullHtml: string;
+      if (outerMatch) {
+        fullHtml = head.replace('{{title}}', title) +
+          `<body class="${outerMatch[1]}">\n${outerMatch[2].trim()}\n</body></html>\n`;
+      } else {
+        fullHtml = head.replace('{{title}}', title) +
+          `<body>\n${body}\n</body></html>\n`;
+      }
+
+      // Embed remote images with concurrency
+      const cacheCountBefore = imgCache.size;
+      fullHtml = await embedImages(fullHtml, opts.concurrency, opts.timeout);
+      const imagesEmbedded = imgCache.size - cacheCountBefore;
+
+      fs.writeFileSync(dst, fullHtml, 'utf-8');
+      const fileSize = fs.statSync(dst).size;
+      console.log(`=> ${dst} (${fileSize.toLocaleString()} bytes)`);
+
+      stats.pages.push({
+        src,
+        dst,
+        sizeBytes: fileSize,
+        imagesEmbedded,
+      });
     }
 
-    // Apply exclude pattern (pre-validated during argument parsing)
-    if (opts.excludePattern) {
-      body = body.replace(opts.excludePattern, '');
+    stats.totalImages = imgCache.size;
+    stats.durationMs = Date.now() - startTime;
+
+    console.log(
+      `\nDONE: ${imgCache.size} unique images embedded in ${stats.durationMs}ms.`,
+    );
+
+    if (opts.json) {
+      console.log('\n--- JSON Stats ---');
+      console.log(JSON.stringify(stats, null, 2));
     }
-
-    // Extract body class from outer wrapper div
-    const outerMatch = body.match(/^<div\s+class="([^"]*)"[^>]*>([\s\S]*)<\/div>$/);
-    let fullHtml: string;
-    if (outerMatch) {
-      fullHtml = head.replace('{{title}}', title) +
-        `<body class="${outerMatch[1]}">\n${outerMatch[2].trim()}\n</body></html>\n`;
-    } else {
-      fullHtml = head.replace('{{title}}', title) +
-        `<body>\n${body}\n</body></html>\n`;
-    }
-
-    // Embed remote images with concurrency
-    const cacheCountBefore = imgCache.size;
-    fullHtml = await embedImages(fullHtml, opts.concurrency, opts.timeout);
-    const imagesEmbedded = imgCache.size - cacheCountBefore;
-
-    fs.writeFileSync(dst, fullHtml, 'utf-8');
-    const fileSize = fs.statSync(dst).size;
-    console.log(`=> ${dst} (${fileSize.toLocaleString()} bytes)`);
-
-    stats.pages.push({
-      src,
-      dst,
-      sizeBytes: fileSize,
-      imagesEmbedded,
-    });
-  }
-
-  stats.totalImages = imgCache.size;
-  stats.durationMs = Date.now() - startTime;
-
-  console.log(
-    `\nDONE: ${imgCache.size} unique images embedded in ${stats.durationMs}ms.`,
-  );
-
-  if (opts.json) {
-    console.log('\n--- JSON Stats ---');
-    console.log(JSON.stringify(stats, null, 2));
+  } finally {
+    // Clear safe URL cache to avoid any memory retention or stale states in long-running processes
+    safeUrlCache.clear();
   }
 }
 
-main().catch((err: Error) => {
-  console.error('❌ Error:', err.message);
-  if (err.stack) console.error(err.stack);
-  process.exit(1);
-});
+const isMain = (() => {
+  try {
+    const nodePath = fs.realpathSync(process.argv[1]);
+    const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url));
+    return nodePath === scriptPath;
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
+  main().catch((err: Error) => {
+    console.error('❌ Error:', err.message);
+    if (err.stack) console.error(err.stack);
+    process.exit(1);
+  });
+}

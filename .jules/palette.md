@@ -49,3 +49,7 @@
 ## 2026-11-29 - Persistent Live Containers and Truncated Node Accessibility
 **Learning:** Dynamic live message containers (e.g., Caps Lock indicators or password match reports) that conditionally mount/unmount tend to break screen reader tracking because assistive software may not watch dynamically injected root live regions. Keeping the `aria-live` containers persistently mounted in the DOM while conditionally outputting text solves this elegantly. Additionally, truncated links or names should include a native `title` attribute so hover and keyboard users can discover the un-truncated content.
 **Action:** Always render `aria-live="polite"` wrapper elements persistently in JSX, and attach standard HTML `title` attributes on truncated links.
+
+## 2026-11-30 - Comprehensive Input Lockdown During Form Submission
+**Learning:** While disabling the form submission trigger during an active async operation prevents duplicate submissions, leaving input fields (such as text fields, select lists, and textareas) unlocked allows users to edit values mid-flight. Disabling all interactive inputs with the active loading state ensures consistent state tracking, prevents post-submit modifications, and offers a cohesive, industry-standard form-saving experience.
+**Action:** Always apply `disabled={formState.isSubmitting}` or equivalent active loading flags to all input fields, select dropdowns, and textareas within custom form pattern examples.
