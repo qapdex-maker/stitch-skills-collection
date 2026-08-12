@@ -90,7 +90,7 @@ export function UserProfileForm() {
                 </span>
               </FormLabel>
               <FormControl>
-                <Input placeholder="johndoe" autoComplete="username" {...field} />
+                <Input placeholder="johndoe" autoComplete="username" {...field} disabled={form.formState.isSubmitting} />
               </FormControl>
               <FormDescription>
                 This is your public display name.
@@ -112,7 +112,7 @@ export function UserProfileForm() {
                 </span>
               </FormLabel>
               <FormControl>
-                <Input type="email" placeholder="john@example.com" autoComplete="email" {...field} />
+                <Input type="email" placeholder="john@example.com" autoComplete="email" {...field} disabled={form.formState.isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -130,7 +130,7 @@ export function UserProfileForm() {
                   *
                 </span>
               </FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={form.formState.isSubmitting}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a role" />
@@ -173,6 +173,7 @@ export function UserProfileForm() {
                   placeholder="Tell us about yourself"
                   className="resize-none"
                   {...field}
+                  disabled={form.formState.isSubmitting}
                 />
               </FormControl>
               <FormDescription>
@@ -214,4 +215,4 @@ export function UserProfileForm() {
  * npx shadcn@latest add select
  * npx shadcn@latest add textarea
  * npx shadcn@latest add button
- */
+ */ 

@@ -20,6 +20,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { isSafePath, resolveLocalFile, extractCssUrls } from './post_process.js';
 import { isSafeUrl as isSafeUrlSnapshot, isSafeOutputPath } from './snapshot.js';
+import { isSafeDstPath } from './extract_inline_html.js';
 
 // Local copy of isSafeUrl and ip6ToIpv4 from extract_inline_html.ts to avoid requiring @babel/parser dependency in unit tests
 function ip6ToIpv4(ip6: string): string | null {
@@ -342,15 +343,6 @@ test.describe('Path Traversal Security Tests', () => {
   });
 
   test('isSafeDstPath should block path traversal out of outdir', () => {
-    const isSafeDstPath = (dstName: string, outdir: string): boolean => {
-      const resolvedOutdir = path.resolve(outdir);
-      const safePrefix = resolvedOutdir.endsWith(path.sep) ? resolvedOutdir : resolvedOutdir + path.sep;
-      const normalizedDstName = dstName.replace(/\\/g, '/');
-      const dst = path.join(outdir, normalizedDstName);
-      const resolvedDst = path.resolve(dst);
-      return resolvedDst === resolvedOutdir || resolvedDst.startsWith(safePrefix);
-    };
-
     const outdir = './stitch-out';
 
     // Safe destination names
@@ -365,6 +357,20 @@ test.describe('Path Traversal Security Tests', () => {
     // Windows/Cross-platform traversal payloads
     assert.strictEqual(isSafeDstPath('..\\evil.html', outdir), false);
     assert.strictEqual(isSafeDstPath('../stitch-out-sibling/evil.html', outdir), false);
+  });
+
+  test('isSafeDstPath should block symlink attacks pointing outside safe outdir', () => {
+    const symlinkPath = path.join(SAFE_ROOT, 'symlink_to_external');
+    const targetPath = path.join(EXTERNAL_DIR, 'secret.txt');
+
+    try {
+      fs.symlinkSync(targetPath, symlinkPath);
+    } catch {
+      // Skip if environment does not support symlinks
+      return;
+    }
+
+    assert.strictEqual(isSafeDstPath('symlink_to_external', SAFE_ROOT), false);
   });
 });
 
