@@ -623,13 +623,17 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
   // Now perform safe replacements sequentially, re-extracting dynamic references
   // (like CSS URL refs whose start/end indices shift) to avoid HTML/CSS corruption.
 
-  // 1. Replace src matches (cache is fully warm — synchronous lookups)
-  for (const m of srcImageMatches) {
-    const encoded = imgCache.get(m[1]);
-    if (encoded && encoded !== m[1]) {
-      html = html.replace(m[0], `src="${encoded}"`);
+  // 1. Replace src matches (cache is fully warm — synchronous lookups) using a single-pass regex replacement
+  // to avoid quadratic time complexity and heavy garbage collection overhead of iterative replacements.
+  html = html.replace(SRC_URL_REGEX, (match, url) => {
+    if (isImageUrl(url)) {
+      const encoded = imgCache.get(url);
+      if (encoded && encoded !== url) {
+        return `src="${encoded}"`;
+      }
     }
-  }
+    return match;
+  });
 
   // 2. Re-extract and replace CSS url() references on the mutated HTML
   const currentCssUrlRefs = extractCssUrls(html);
@@ -650,15 +654,15 @@ async function embedImages(html: string, concurrency: number, timeout: number): 
     html = replaceCssUrlsInText(html, replacements);
   }
 
-  // 3. Replace video poster matches on the final mutated HTML
-  // Re-extracting poster matches ensures correct matches even if HTML has shifted
-  const currentPosterMatches = [...html.matchAll(/poster="(https?:\/\/[^"]+)"/g)];
-  for (const m of currentPosterMatches) {
-    const encoded = imgCache.get(m[1]);
-    if (encoded && encoded !== m[1]) {
-      html = html.replace(m[0], `poster="${encoded}"`);
+  // 3. Replace video poster matches on the final mutated HTML using a single-pass regex replacement
+  // to avoid quadratic time complexity and heavy garbage collection overhead of iterative replacements.
+  html = html.replace(POSTER_URL_REGEX, (match, url) => {
+    const encoded = imgCache.get(url);
+    if (encoded && encoded !== url) {
+      return `poster="${encoded}"`;
     }
-  }
+    return match;
+  });
 
   return html;
 }
