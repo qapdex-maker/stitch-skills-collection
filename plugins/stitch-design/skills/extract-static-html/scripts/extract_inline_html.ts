@@ -1022,8 +1022,10 @@ function readCssFile(filePath: string | null): { imports: string[]; css: string;
   const imports: string[] = [];
   const cssLines: string[] = [];
   for (const line of content.split('\n')) {
-    if (line.trim().startsWith('@import')) imports.push(line.trim());
-    else if (!line.trim().startsWith('@tailwind')) cssLines.push(line);
+    // Bolt optimization: Cache the trimmed line once instead of calling .trim() repeatedly
+    const trimmed = line.trim();
+    if (trimmed.startsWith('@import')) imports.push(trimmed);
+    else if (!trimmed.startsWith('@tailwind')) cssLines.push(line);
   }
   const css = cssLines.join('\n');
   return { imports, css, hasApply: /@apply\s+/.test(css) };
