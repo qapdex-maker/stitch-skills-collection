@@ -34,6 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import type { Node } from '@babel/types';
 
 // ---------------------------------------------------------------------------
@@ -151,15 +152,63 @@ Options:
 // ---------------------------------------------------------------------------
 // Input validation
 // ---------------------------------------------------------------------------
+/**
+ * Validate that the destination page file path is safe and resides strictly
+ * within the output directory (CWE-22 / SSRF / Path Traversal protection).
+ * Resolves symlinks/junctions to check the canonical physical path.
+ */
+export function isSafeDstPath(dstName: string, outdir: string): boolean {
+  try {
+    const resolvedOutdir = path.resolve(outdir);
+    let canonicalOutdir = resolvedOutdir;
+    try {
+      if (fs.existsSync(resolvedOutdir)) {
+        canonicalOutdir = fs.realpathSync(resolvedOutdir);
+      }
+    } catch {
+      // Fallback if realpathSync fails
+    }
+
+    // Normalize backslashes to forward slashes for cross-platform safety
+    const normalizedDstName = dstName.replace(/\\/g, '/');
+    const dst = path.join(outdir, normalizedDstName);
+    const resolvedDst = path.resolve(dst);
+
+    let canonicalDst = resolvedDst;
+    try {
+      if (fs.existsSync(resolvedDst)) {
+        canonicalDst = fs.realpathSync(resolvedDst);
+      } else {
+        const parentDir = path.dirname(resolvedDst);
+        if (fs.existsSync(parentDir)) {
+          canonicalDst = path.join(fs.realpathSync(parentDir), path.basename(resolvedDst));
+        }
+      }
+    } catch {
+      // Fallback if realpathSync fails
+    }
+
+    let normDst = canonicalDst;
+    let normOutdir = canonicalOutdir;
+
+    if (process.platform === 'win32') {
+      normDst = normDst.toLowerCase();
+      normOutdir = normOutdir.toLowerCase();
+    }
+
+    const safePrefix = normOutdir.endsWith(path.sep) ? normOutdir : normOutdir + path.sep;
+    return normDst === normOutdir || normDst.startsWith(safePrefix);
+  } catch {
+    return false;
+  }
+}
+
 function validateOpts(opts: Opts): void {
   const errors: string[] = [];
 
   if (opts.pages.length === 0) {
     errors.push('No pages specified. Use --page src:dst:title');
   }
-
-  const resolvedOutdir = path.resolve(opts.outdir);
-  const safePrefix = resolvedOutdir.endsWith(path.sep) ? resolvedOutdir : resolvedOutdir + path.sep;
 
   for (const spec of opts.pages) {
     const parts = spec.split(':');
@@ -172,11 +221,7 @@ function validateOpts(opts: Opts): void {
       }
 
       // Security: prevent path traversal out of the designated output directory (CWE-22)
-      // Normalize backslashes to forward slashes for cross-platform safety
-      const normalizedDstName = dstName.replace(/\\/g, '/');
-      const dst = path.join(opts.outdir, normalizedDstName);
-      const resolvedDst = path.resolve(dst);
-      if (resolvedDst !== resolvedOutdir && !resolvedDst.startsWith(safePrefix)) {
+      if (!isSafeDstPath(dstName, opts.outdir)) {
         errors.push(`Security Error: Destination path '${dstName}' escapes output directory '${opts.outdir}'`);
       }
     }
@@ -1153,8 +1198,20 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err: Error) => {
-  console.error('❌ Error:', err.message);
-  if (err.stack) console.error(err.stack);
-  process.exit(1);
-});
+const isMain = (() => {
+  try {
+    const nodePath = fs.realpathSync(process.argv[1]);
+    const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url));
+    return nodePath === scriptPath;
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
+  main().catch((err: Error) => {
+    console.error('❌ Error:', err.message);
+    if (err.stack) console.error(err.stack);
+    process.exit(1);
+  });
+}
