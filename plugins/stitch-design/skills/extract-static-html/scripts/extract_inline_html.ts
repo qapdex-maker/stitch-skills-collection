@@ -304,6 +304,14 @@ function isImageUrl(url: string): boolean {
   return !IMAGE_URL_SKIP_REGEX.test(url);
 }
 
+// Bolt optimization: Hoist inline RegExp literals to module-level static constants
+// to completely bypass dynamic compilation overhead on hot paths or loops.
+const CAMEL_TO_KEBAB_REGEX = /([a-z])([A-Z])/g;
+const STYLE_TAG_REGEX = /<style[^>]*>(.*?)<\/style>/gs;
+const LINK_TAG_REGEX = /<link[^>]+href="([^"]+)"[^>]*rel="stylesheet"[^>]*\/?>|<link[^>]+rel="stylesheet"[^>]*href="([^"]+)"[^>]*\/?>/g;
+const OUTER_DIV_WRAPPER_REGEX = /^<div\s+class="([^"]*)"[^>]*>([\s\S]*)<\/div>$/;
+const APPLY_RULE_REGEX = /@apply\s+/;
+
 
 
 /**
@@ -735,7 +743,7 @@ const camelToKebabCache = new Map<string, string>();
 function camelToKebab(str: string): string {
   const cached = camelToKebabCache.get(str);
   if (cached !== undefined) return cached;
-  const result = str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+  const result = str.replace(CAMEL_TO_KEBAB_REGEX, '$1-$2').toLowerCase();
   camelToKebabCache.set(str, result);
   return result;
 }
@@ -1028,7 +1036,7 @@ function readCssFile(filePath: string | null): { imports: string[]; css: string;
     else if (!trimmed.startsWith('@tailwind')) cssLines.push(line);
   }
   const css = cssLines.join('\n');
-  return { imports, css, hasApply: /@apply\s+/.test(css) };
+  return { imports, css, hasApply: APPLY_RULE_REGEX.test(css) };
 }
 
 function extractFromHtml(htmlPath: string | null): { styles: string; links: string[] } {
@@ -1037,11 +1045,11 @@ function extractFromHtml(htmlPath: string | null): { styles: string; links: stri
   const styles: string[] = [];
   const links: string[] = [];
   // Extract <style> blocks
-  for (const m of html.matchAll(/<style[^>]*>(.*?)<\/style>/gs)) {
+  for (const m of html.matchAll(STYLE_TAG_REGEX)) {
     styles.push(m[1].trim());
   }
   // Extract stylesheet <link> tags with http URLs
-  for (const m of html.matchAll(/<link[^>]+href="([^"]+)"[^>]*rel="stylesheet"[^>]*\/?>|<link[^>]+rel="stylesheet"[^>]*href="([^"]+)"[^>]*\/?>/g)) {
+  for (const m of html.matchAll(LINK_TAG_REGEX)) {
     const href = m[1] || m[2];
     if (href?.startsWith('http')) links.push(href);
   }
@@ -1085,7 +1093,7 @@ function buildHead(opts: Opts): string {
     if (fs.existsSync(f)) {
       const content = fs.readFileSync(f, 'utf-8');
       extraCssContent += `/* --- ${path.basename(f)} --- */\n${content}\n`;
-      if (/@apply\s+/.test(content)) hasApply = true;
+      if (APPLY_RULE_REGEX.test(content)) hasApply = true;
       console.log(`Included CSS: ${f}`);
     }
   }
@@ -1175,7 +1183,7 @@ async function main(): Promise<void> {
       }
 
       // Extract body class from outer wrapper div
-      const outerMatch = body.match(/^<div\s+class="([^"]*)"[^>]*>([\s\S]*)<\/div>$/);
+      const outerMatch = body.match(OUTER_DIV_WRAPPER_REGEX);
       let fullHtml: string;
       if (outerMatch) {
         fullHtml = head.replace('{{title}}', title) +
